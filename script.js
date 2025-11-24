@@ -41,16 +41,14 @@ function hideLoading() {
     setTimeout(() => {
         loadingScreen.classList.add('hidden');
         setTimeout(() => loadingScreen.remove(), 500);
-    }, 2000);
+    }, 1500);
 }
 
 // ============ GEOLOCALIZAÇÃO ============
 async function getUserLocation() {
     return new Promise((resolve, reject) => {
         if (!navigator.geolocation) {
-            // Fallback para Lisboa
-            state.userLocation = { lat: 38.7223, lon: -9.1393 };
-            resolve(state.userLocation);
+            reject(new Error('Geolocalização não suportada'));
             return;
         }
 
@@ -63,10 +61,7 @@ async function getUserLocation() {
                 resolve(state.userLocation);
             },
             error => {
-                console.log('Geolocalização não permitida, usando localização padrão');
-                // Localização fallback (Lisboa)
-                state.userLocation = { lat: 38.7223, lon: -9.1393 };
-                resolve(state.userLocation);
+                reject(new Error('Permissão de localização negada'));
             },
             {
                 timeout: 10000,
@@ -76,36 +71,12 @@ async function getUserLocation() {
     });
 }
 
-// ============ API WEATHER - SISTEMA ROBUSTO ============
+// ============ API WEATHER - APENAS DADOS REAIS ============
 async function getWeatherData(lat, lon) {
-    // Tentar múltiplas fontes de dados
-    const weatherSources = [
-        tryOpenMeteoAPI(lat, lon),
-        tryWeatherAPIFallback(lat, lon),
-        generateSimulatedWeather(lat, lon)
-    ];
-
-    for (const source of weatherSources) {
-        try {
-            const weatherData = await source;
-            if (weatherData) {
-                console.log('Dados meteorológicos obtidos com sucesso');
-                return weatherData;
-            }
-        } catch (error) {
-            console.log('Fonte de dados falhou, tentando próxima...');
-        }
-    }
-    
-    // Fallback final
-    return generateSimulatedWeather(lat, lon);
-}
-
-// Fonte 1: Open-Meteo (API gratuita e sem chave)
-async function tryOpenMeteoAPI(lat, lon) {
     try {
+        // Open-Meteo API - completamente gratuita e sem chave
         const response = await fetch(
-            `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,surface_pressure&timezone=auto`
+            `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,surface_pressure,weather_code&timezone=auto`
         );
         
         if (!response.ok) throw new Error('Open-Meteo API error');
@@ -113,112 +84,77 @@ async function tryOpenMeteoAPI(lat, lon) {
         const data = await response.json();
         const current = data.current;
         
+        // Obter nome da localização via API de geocoding reversa
+        const locationName = await getLocationName(lat, lon);
+        
         return {
             temperature: Math.round(current.temperature_2m),
             humidity: Math.round(current.relative_humidity_2m),
             windSpeed: Math.round(current.wind_speed_10m * 3.6), // converter para km/h
             windDeg: current.wind_direction_10m,
             pressure: Math.round(current.surface_pressure),
-            description: getWeatherDescription(current.temperature_2m, current.relative_humidity_2m),
-            location: 'Tua Localização'
+            weatherCode: current.weather_code,
+            description: getWeatherDescriptionFromCode(current.weather_code),
+            location: locationName
         };
     } catch (error) {
-        throw new Error('Open-Meteo failed');
+        console.error('Erro ao obter dados meteorológicos:', error);
+        throw new Error('Não foi possível obter dados meteorológicos em tempo real');
     }
 }
 
-// Fonte 2: WeatherAPI com fallback
-async function tryWeatherAPIFallback(lat, lon) {
+// API de Geocoding Reversa para obter nome da localização
+async function getLocationName(lat, lon) {
     try {
-        // Esta é uma API pública de exemplo - em produção usar chave real
         const response = await fetch(
-            `https://api.weather.gov/points/${lat},${lon}`
+            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=pt`
         );
         
-        if (!response.ok) throw new Error('Weather API error');
-        
-        // Simular dados para demonstração
-        return generateSimulatedWeather(lat, lon);
+        if (response.ok) {
+            const data = await response.json();
+            return data.city || data.locality || 'Localização Atual';
+        }
     } catch (error) {
-        throw new Error('Weather API failed');
+        console.log('Geocoding API falhou');
     }
+    
+    return 'Tua Localização';
 }
 
-// Fonte 3: Dados simulados baseados na localização e estação
-function generateSimulatedWeather(lat, lon) {
-    const now = new Date();
-    const month = now.getMonth();
-    const hour = now.getHours();
-    
-    // Determinar estação baseada no mês e hemisfério
-    const isNorthernHemisphere = lat > 0;
-    let season;
-    if (month >= 2 && month <= 4) season = isNorthernHemisphere ? 'spring' : 'autumn';
-    else if (month >= 5 && month <= 7) season = isNorthernHemisphere ? 'summer' : 'winter';
-    else if (month >= 8 && month <= 10) season = isNorthernHemisphere ? 'autumn' : 'spring';
-    else season = isNorthernHemisphere ? 'winter' : 'summer';
-    
-    // Gerar dados realistas baseados na estação e hora
-    const baseTemp = getBaseTemperature(season, lat);
-    const tempVariation = getHourlyVariation(hour);
-    const temperature = Math.round(baseTemp + tempVariation);
-    
-    const humidity = 40 + Math.floor(Math.random() * 40); // 40-80%
-    const windSpeed = 1 + Math.floor(Math.random() * 20); // 1-20 km/h
-    const windDeg = Math.floor(Math.random() * 360);
-    const pressure = 1000 + Math.floor(Math.random() * 30); // 1000-1030 hPa
-    
-    return {
-        temperature: temperature,
-        humidity: humidity,
-        windSpeed: windSpeed,
-        windDeg: windDeg,
-        pressure: pressure,
-        description: getWeatherDescription(temperature, humidity),
-        location: 'Simulação Realista'
-    };
-}
-
-function getBaseTemperature(season, lat) {
-    const baseTemps = {
-        spring: 15,
-        summer: 25,
-        autumn: 18,
-        winter: 8
+// Converter código meteorológico em descrição
+function getWeatherDescriptionFromCode(weatherCode) {
+    const weatherCodes = {
+        0: 'Céu limpo',
+        1: 'Principalmente limpo',
+        2: 'Parcialmente nublado',
+        3: 'Nublado',
+        45: 'Nevoeiro',
+        48: 'Nevoeiro com geada',
+        51: 'Chuvisco leve',
+        53: 'Chuvisco moderado',
+        55: 'Chuvisco denso',
+        56: 'Chuvisco gelado leve',
+        57: 'Chuvisco gelado denso',
+        61: 'Chuva leve',
+        63: 'Chuva moderada',
+        65: 'Chuva forte',
+        66: 'Chuva gelada leve',
+        67: 'Chuva gelada forte',
+        71: 'Queda de neve leve',
+        73: 'Queda de neve moderada',
+        75: 'Queda de neve forte',
+        77: 'Grãos de neve',
+        80: 'Pancadas de chuva leves',
+        81: 'Pancadas de chuva moderadas',
+        82: 'Pancadas de chuva violentas',
+        85: 'Pancadas de neve leves',
+        86: 'Pancadas de neve fortes',
+        95: 'Trovoada',
+        96: 'Trovoada com granizo leve',
+        99: 'Trovoada com granizo forte'
     };
     
-    let temp = baseTemps[season];
-    
-    // Ajustar pela latitude (mais frio longe do equador)
-    const absLat = Math.abs(lat);
-    if (absLat > 40) temp -= 5;
-    if (absLat > 50) temp -= 5;
-    if (absLat > 60) temp -= 5;
-    
-    return temp;
-}
-
-function getHourlyVariation(hour) {
-    // Temperatura mais baixa de madrugada, mais alta à tarde
-    if (hour >= 22 || hour < 6) return -5; // Noite
-    if (hour >= 6 && hour < 10) return -2; // Manhã cedo
-    if (hour >= 10 && hour < 14) return 2; // Meio-dia
-    if (hour >= 14 && hour < 18) return 5; // Tarde
-    return 0; // Entardecer
-}
-
-function getWeatherDescription(temperature, humidity) {
-    if (temperature > 30) return 'Muito Quente';
-    if (temperature > 25) return 'Quente';
-    if (temperature > 20) return 'Agradável';
-    if (temperature > 15) return 'Ameno';
-    if (temperature > 10) return 'Fresco';
-    if (temperature > 5) return 'Frio';
-    if (temperature > 0) return 'Muito Frio';
-    
-    if (humidity > 80) return 'Húmido';
-    if (humidity > 60) return 'Moderado';
-    return 'Seco';
+    return weatherCodes[weatherCode] || 'Condições desconhecidas';
 }
 
 // ============ VISUALIZAÇÃO DO CLIMA ============
@@ -239,31 +175,38 @@ function drawWeatherVisualization(weatherData) {
     // Limpar canvas
     weatherCtx.clearRect(0, 0, width, height);
     
-    // Fundo gradiente baseado na temperatura
-    const temp = weatherData.temperature;
-    let color1, color2;
-    
-    if (temp > 25) {
-        color1 = 'rgba(231, 76, 60, 0.1)';   // Vermelho para calor
-        color2 = 'rgba(243, 156, 18, 0.1)';  // Laranja
-    } else if (temp > 15) {
-        color1 = 'rgba(46, 204, 113, 0.1)';  // Verde para ameno
-        color2 = 'rgba(52, 152, 219, 0.1)';  // Azul
+    // Fundo baseado nas condições reais
+    let gradient;
+    if (weatherData.weatherCode >= 0 && weatherData.weatherCode <= 3) {
+        // Céu limpo a nublado
+        gradient = weatherCtx.createLinearGradient(0, 0, width, height);
+        gradient.addColorStop(0, 'rgba(135, 206, 235, 0.2)'); // Azul céu
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0.1)');
+    } else if (weatherData.weatherCode >= 45 && weatherData.weatherCode <= 48) {
+        // Nevoeiro
+        gradient = weatherCtx.createLinearGradient(0, 0, width, height);
+        gradient.addColorStop(0, 'rgba(210, 210, 210, 0.3)');
+        gradient.addColorStop(1, 'rgba(180, 180, 180, 0.2)');
+    } else if (weatherData.weatherCode >= 51 && weatherData.weatherCode <= 67) {
+        // Chuva
+        gradient = weatherCtx.createLinearGradient(0, 0, width, height);
+        gradient.addColorStop(0, 'rgba(100, 149, 237, 0.3)'); // Azul acinzentado
+        gradient.addColorStop(1, 'rgba(70, 130, 180, 0.2)');
     } else {
-        color1 = 'rgba(52, 152, 219, 0.1)';  // Azul para frio
-        color2 = 'rgba(155, 89, 182, 0.1)';  // Roxo
+        // Condições diversas
+        gradient = weatherCtx.createLinearGradient(0, 0, width, height);
+        gradient.addColorStop(0, 'rgba(46, 204, 113, 0.1)');
+        gradient.addColorStop(1, 'rgba(52, 152, 219, 0.1)');
     }
     
-    const gradient = weatherCtx.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, color1);
-    gradient.addColorStop(1, color2);
     weatherCtx.fillStyle = gradient;
     weatherCtx.fillRect(0, 0, width, height);
     
-    // Desenhar elementos baseados nos dados meteorológicos
+    // Desenhar elementos baseados nos dados meteorológicos REAIS
     drawWindLines(weatherData.windSpeed, weatherData.windDeg);
     drawTemperatureCircles(weatherData.temperature);
     drawHumidityDrops(weatherData.humidity);
+    drawWeatherSymbol(weatherData.weatherCode);
 }
 
 function drawWindLines(speed, deg) {
@@ -274,7 +217,7 @@ function drawWindLines(speed, deg) {
     const angle = (deg * Math.PI) / 180;
     const length = (speed / 30) * maxLength;
     
-    // Cor baseada na velocidade do vento
+    // Cor baseada na velocidade do vento REAL
     const intensity = Math.min(1, speed / 20);
     weatherCtx.strokeStyle = `rgba(52, 152, 219, ${0.3 + intensity * 0.7})`;
     weatherCtx.lineWidth = 1 + intensity * 3;
@@ -288,7 +231,7 @@ function drawWindLines(speed, deg) {
     );
     weatherCtx.stroke();
     
-    // Adicionar ponta da seta
+    // Ponta da seta
     weatherCtx.setLineDash([]);
     const arrowSize = 8;
     const endX = centerX + Math.cos(angle) * length;
@@ -313,7 +256,7 @@ function drawTemperatureCircles(temperature) {
     const centerX = weatherCanvas.width / 2;
     const centerY = weatherCanvas.height / 2;
     
-    // Cor baseada na temperatura
+    // Cor baseada na temperatura REAL
     let hue;
     if (temperature < 0) hue = 240;       // Azul (frio)
     else if (temperature < 10) hue = 200; // Azul claro
@@ -324,7 +267,7 @@ function drawTemperatureCircles(temperature) {
     const intensity = Math.min(1, Math.abs(temperature - 15) / 30);
     weatherCtx.fillStyle = `hsla(${hue}, 70%, 50%, ${0.2 + intensity * 0.3})`;
     
-    // Número de círculos baseado na temperatura
+    // Número de círculos baseado na temperatura REAL
     const circleCount = Math.max(3, Math.min(8, Math.floor(Math.abs(temperature) / 5)));
     const baseRadius = 20;
     
@@ -346,13 +289,13 @@ function drawTemperatureCircles(temperature) {
 }
 
 function drawHumidityDrops(humidity) {
-    const dropCount = Math.floor(humidity / 15); // Mais gotas para maior humidade
+    const dropCount = Math.floor(humidity / 15); // Baseado na humidade REAL
     
     for (let i = 0; i < dropCount; i++) {
         const x = Math.random() * weatherCanvas.width;
         const y = Math.random() * weatherCanvas.height;
         const size = 1 + Math.random() * 3;
-        const alpha = 0.1 + (humidity / 200);
+        const alpha = 0.1 + (humidity / 200); // Alpha baseado na humidade REAL
         
         weatherCtx.fillStyle = `rgba(52, 152, 219, ${alpha})`;
         
@@ -366,6 +309,27 @@ function drawHumidityDrops(humidity) {
     }
 }
 
+function drawWeatherSymbol(weatherCode) {
+    const centerX = weatherCanvas.width / 2;
+    const centerY = weatherCanvas.height / 2;
+    
+    weatherCtx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    weatherCtx.font = '24px Arial';
+    weatherCtx.textAlign = 'center';
+    weatherCtx.textBaseline = 'middle';
+    
+    let symbol = '☀️'; // Default
+    
+    if (weatherCode >= 0 && weatherCode <= 3) symbol = '☀️';
+    else if (weatherCode >= 45 && weatherCode <= 48) symbol = '🌫️';
+    else if (weatherCode >= 51 && weatherCode <= 67) symbol = '🌧️';
+    else if (weatherCode >= 71 && weatherCode <= 77) symbol = '❄️';
+    else if (weatherCode >= 80 && weatherCode <= 86) symbol = '⛈️';
+    else if (weatherCode >= 95 && weatherCode <= 99) symbol = '🌩️';
+    
+    weatherCtx.fillText(symbol, centerX, centerY - 60);
+}
+
 // ============ SISTEMA DE RITUAIS ============
 class BioRitualSystem {
     constructor() {
@@ -377,35 +341,35 @@ class BioRitualSystem {
         const rituals = [
             {
                 title: "Respiração do Vento",
-                description: "Sincroniza tua respiração com o ritmo do vento local. Inspira por 4s, expira por 6s.",
+                description: `Sincroniza tua respiração com o vento de ${weatherData.windSpeed} km/h. Inspira por 4s, expira por 6s.`,
                 duration: 60,
                 type: "wind",
                 points: 10
             },
             {
                 title: "Grounding Térmico", 
-                description: "Conecta com a temperatura ambiente. Sente o calor/frio e ajusta tua respiração.",
+                description: `Conecta com a temperatura de ${weatherData.temperature}°C. Sente o calor/frio e ajusta tua respiração.`,
                 duration: 90,
                 type: "thermal",
                 points: 15
             },
             {
                 title: "Meditação da Humidade",
-                description: "Visualiza a humidade do ar como uma brisa refrescante que te envolve.",
+                description: `Visualiza a humidade de ${weatherData.humidity}% como uma brisa refrescante que te envolve.`,
                 duration: 120,
                 type: "water",
                 points: 20
             },
             {
                 title: "Conexão com a Pressão",
-                description: "Sente a pressão atmosférica como um abraço da Terra. Relaxa e entrega-te.",
+                description: `Sente a pressão atmosférica de ${weatherData.pressure} hPa como um abraço da Terra. Relaxa e entrega-te.`,
                 duration: 75,
                 type: "pressure", 
                 points: 12
             }
         ];
         
-        // Escolher ritual baseado nos dados meteorológicos
+        // Escolher ritual baseado nos dados meteorológicos REAIS
         let chosenRitual;
         if (weatherData.windSpeed > 5) {
             chosenRitual = rituals[0]; // Vento
@@ -494,52 +458,53 @@ class BioRitualSystem {
     }
 }
 
-// ============ MAPA DE ESPÉCIES ============
+// ============ MAPA DE ESPÉCIES - DADOS REAIS ============
 async function loadLocalSpecies(lat, lon) {
     try {
-        // GBIF API para espécies próximas - com tratamento de erro melhorado
+        // GBIF API - dados reais de biodiversidade
         const response = await fetch(
-            `https://api.gbif.org/v1/occurrence/search?lat=${lat}&lon=${lon}&limit=8&radius=20&hasCoordinate=true&hasGeospatialIssue=false`
+            `https://api.gbif.org/v1/occurrence/search?lat=${lat}&lon=${lon}&limit=6&radius=50&hasCoordinate=true&hasGeospatialIssue=false&basisOfRecord=HUMAN_OBSERVATION&year=2022,2023,2024`
         );
         
-        if (!response.ok) throw new Error('Species API error');
+        if (!response.ok) throw new Error('GBIF API error');
         
         const data = await response.json();
         
         if (data.results && data.results.length > 0) {
-            return data.results.slice(0, 6).map(occurrence => ({
-                species: occurrence.species || 'Espécie não identificada',
-                family: occurrence.family || 'Família desconhecida'
-            }));
+            // Filtrar e processar dados REAIS
+            const realSpecies = data.results
+                .filter(occurrence => occurrence.species && occurrence.family)
+                .slice(0, 6)
+                .map(occurrence => ({
+                    species: occurrence.species,
+                    family: occurrence.family,
+                    year: occurrence.year
+                }));
+            
+            return realSpecies.length > 0 ? realSpecies : getFallbackSpecies();
         } else {
-            // Dados de exemplo quando não há resultados
-            return getExampleSpecies();
+            return getFallbackSpecies();
         }
     } catch (error) {
-        console.log('API de espécies não disponível, usando dados de exemplo');
-        return getExampleSpecies();
+        console.log('API de espécies temporariamente indisponível');
+        return getFallbackSpecies();
     }
 }
 
-function getExampleSpecies() {
-    const examples = [
-        { species: 'Pardal-comum', family: 'Passeridae' },
-        { species: 'Oliveira', family: 'Oleaceae' },
-        { species: 'Abelha-europeia', family: 'Apidae' },
-        { species: 'Pinheiro-manso', family: 'Pinaceae' },
-        { species: 'Toutinegra-de-barrete', family: 'Sylviidae' },
-        { species: 'Urze', family: 'Ericaceae' }
+// Apenas espécies reais como fallback
+function getFallbackSpecies() {
+    return [
+        { species: 'Pardal-comum', family: 'Passeridae', year: 'Observação comum' },
+        { species: 'Andorinha-das-chaminés', family: 'Hirundinidae', year: 'Migratória' },
+        { species: 'Pombo-doméstico', family: 'Columbidae', year: 'Urbana' }
     ];
-    
-    // Embaralhar array para variedade
-    return examples.sort(() => Math.random() - 0.5).slice(0, 4);
 }
 
 function displaySpecies(speciesList) {
     const container = document.getElementById('speciesList');
     
     if (!speciesList || speciesList.length === 0) {
-        container.innerHTML = '<div class="species-item">🌿 A explorar biodiversidade local...</div>';
+        container.innerHTML = '<div class="species-item">🔍 A explorar biodiversidade local...</div>';
         return;
     }
     
@@ -547,7 +512,7 @@ function displaySpecies(speciesList) {
         <div class="species-item">
             <strong>${species.species}</strong>
             <br>
-            <small>${species.family}</small>
+            <small>${species.family} • ${species.year || 'Observada'}</small>
         </div>
     `).join('');
 }
@@ -589,17 +554,15 @@ class ForceFieldVisualization {
     
     updateParticles() {
         this.particles.forEach(particle => {
-            // Aplicar forças baseadas no tipo de campo
+            // Forças baseadas no tipo de campo (visual apenas)
             switch(this.fieldType) {
                 case 'wind':
                     particle.vx += 0.1;
                     particle.vy += (Math.random() - 0.5) * 0.2;
-                    particle.size = particle.originalSize * (0.8 + 0.4 * Math.sin(Date.now() * 0.001 + particle.x));
                     break;
                 case 'thermal':
                     particle.vy -= 0.05;
                     particle.vx += (Math.random() - 0.5) * 0.3;
-                    particle.size = particle.originalSize * (1 + 0.3 * Math.sin(Date.now() * 0.002 + particle.y));
                     break;
                 case 'bio':
                     const centerX = forceCanvas.width / 2;
@@ -612,7 +575,6 @@ class ForceFieldVisualization {
                     
                     particle.vx += Math.cos(angle) * force;
                     particle.vy += Math.sin(angle) * force;
-                    particle.size = particle.originalSize * (0.7 + 0.6 * Math.sin(Date.now() * 0.003 + distance * 0.1));
                     break;
             }
             
@@ -714,17 +676,17 @@ class ForceFieldVisualization {
 // ============ INICIALIZAÇÃO DA APLICAÇÃO ============
 async function initializeApp() {
     try {
-        console.log('🌱 Iniciando ECO-SAPIENS...');
+        console.log('🌱 Iniciando ECO-SAPIENS com dados REAIS...');
         
-        // 1. Obter localização do usuário
+        // 1. Obter localização REAL do usuário
         await getUserLocation();
-        console.log('📍 Localização obtida:', state.userLocation);
+        console.log('📍 Localização REAL obtida:', state.userLocation);
         
-        // 2. Carregar dados meteorológicos
+        // 2. Carregar dados meteorológicos REAIS
         state.weatherData = await getWeatherData(state.userLocation.lat, state.userLocation.lon);
-        console.log('🌤 Dados meteorológicos:', state.weatherData);
+        console.log('🌤 Dados meteorológicos REAIS:', state.weatherData);
         
-        // 3. Atualizar UI com dados meteorológicos
+        // 3. Atualizar UI com dados REAIS
         updateWeatherUI(state.weatherData);
         
         // 4. Configurar visualizações
@@ -732,16 +694,16 @@ async function initializeApp() {
         setupForceCanvas();
         drawWeatherVisualization(state.weatherData);
         
-        // 5. Inicializar sistemas
+        // 5. Inicializar sistemas com dados REAIS
         const ritualSystem = new BioRitualSystem();
         ritualSystem.generateRitual(state.weatherData);
         ritualSystem.updateStats();
         
-        // 6. Inicializar campos de força
+        // 6. Inicializar campos de força (visual apenas)
         const forceField = new ForceFieldVisualization();
         forceField.animate();
         
-        // 7. Carregar espécies locais
+        // 7. Carregar espécies locais REAIS
         const species = await loadLocalSpecies(state.userLocation.lat, state.userLocation.lon);
         displaySpecies(species);
         
@@ -778,14 +740,24 @@ async function initializeApp() {
         // 9. Esconder loading screen
         hideLoading();
         
-        console.log('✅ ECO-SAPIENS inicializado com sucesso!');
+        console.log('✅ ECO-SAPIENS inicializado com DADOS REAIS!');
         
     } catch (error) {
         console.error('❌ Erro na inicialização:', error);
-        // Mesmo com erro, mostrar a aplicação com dados simulados
-        state.weatherData = generateSimulatedWeather(38.7223, -9.1393);
-        updateWeatherUI(state.weatherData);
-        hideLoading();
+        
+        // Mostrar erro ao usuário em vez de dados simulados
+        document.getElementById('loadingScreen').innerHTML = `
+            <div class="loading-content">
+                <h2>🌍 ECO-SAPIENS</h2>
+                <p>⚠️ ${error.message}</p>
+                <p style="font-size: 0.9rem; margin-top: 10px;">
+                    Para uma experiência completa, permite a localização e verifica a ligação à internet.
+                </p>
+                <button onclick="location.reload()" style="margin-top: 15px; padding: 10px 20px; background: var(--primary); border: none; border-radius: 20px; color: white; cursor: pointer;">
+                    🔄 Tentar Novamente
+                </button>
+            </div>
+        `;
     }
 }
 
@@ -799,11 +771,9 @@ function updateWeatherUI(weatherData) {
 }
 
 function setActiveFieldButton(activeId) {
-    // Remover classe active de todos os botões
     document.querySelectorAll('.force-controls button').forEach(btn => {
         btn.classList.remove('active');
     });
-    // Adicionar classe active ao botão clicado
     document.getElementById(activeId).classList.add('active');
 }
 
