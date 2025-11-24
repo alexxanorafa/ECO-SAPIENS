@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECO-SAPIENS - Simbiose Digital com a Natureza</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="menu-icon" id="menuIcon">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+        <h1>ECO-SAPIENS</h1>
+        <nav class="menu" id="menu">
+            <ul>
+                <li><a href="https://alexxanorafa.github.io/Alquimia-dos-Sentimentos/" class="menu-item">Alquimia dos Sentimentos</a></li>
+                <li><a href="https://alexxanorafa.github.io/Almas-Conectadas/" class="menu-item">Almas Conectadas</a></li>
+                <li><a href="https://alexxanorafa.github.io/Aneis_da_Sabedoria/" class="menu-item">Anéis da Sabedoria</a></li>
+                <li><a href="https://alexxanorafa.github.io/Animais-de-Poder/" class="menu-item">Animais de Poder</a></li>
+                <li><a href="https://alexxanorafa.github.io/Biblioteca-Onirica/" class="menu-item">Biblioteca Onirica</a></li>
+                <li><a href="https://alexxanorafa.github.io/Buzios/" class="menu-item">Buzios</a></li>
+                <li><a href="https://alexxanorafa.github.io/Cartas-de-Sibila/" class="menu-item">Cartas de Sibila</a></li>
+                <li><a href="https://alexxanorafa.github.io/Do-you-love-me/" class="menu-item">Do you love me?</a></li>
+                <li><a href="https://alexxanorafa.github.io/I-Ching-Virtual/" class="menu-item">I Ching Virtual</a></li>
+                <li><a href="https://alexxanorafa.github.io/Jogo-Didatico-Banco-de-Dados/" class="menu-item">Jogo Didatico Banco de Dados</a></li>
+                <li><a href="https://alexxanorafa.github.io/Jornada-Arquetipica/" class="menu-item">Jornada Arquetípica</a></li>
+                <li><a href="https://alexxanorafa.github.io/Jornadas-Mitologica/" class="menu-item">Jornada Mitológica</a></li>
+                <li><a href="https://alexxanorafa.github.io/Kabbalah-Interativa/" class="menu-item">Kabbalah Interativa</a></li>
+                <li><a href="https://alexxanorafa.github.io/Livro-das-Sombras/" class="menu-item">Livro das Sombras</a></li>
+                <li><a href="https://alexxanorafa.github.io/Magia-das-Cores/" class="menu-item">Magia das Cores</a></li>
+                <li><a href="https://alexxanorafa.github.io/Murmurios-do-Destino/" class="menu-item">Murmúrios do Destino</a></li>
+                <li><a href="https://alexxanorafa.github.io/O-Construtor-do-Destino/" class="menu-item">O Construtor do Destino</a></li>
+                <li><a href="https://alexxanorafa.github.io/Oraculo-das-Pedras/" class="menu-item">Oráculo das Pedras</a></li>
+                <li><a href="https://alexxanorafa.github.io/Oraculo-dos-Deuses/" class="menu-item">Oráculo dos Deuses</a></li>
+                <li><a href="https://alexxanorafa.github.io/Oraculo-Numerologico/" class="menu-item">Oráculo Numerológico</a></li>
+                <li><a href="https://alexxanorafa.github.io/Pendulo-Divinatorio/" class="menu-item">Pendulo Divinatorio</a></li>
+                <li><a href="https://alexxanorafa.github.io/Portal-das-Almas/" class="menu-item">Portal das Almas</a></li>
+                <li><a href="https://alexxanorafa.github.io/Runas-Celtas/" class="menu-item">Runas Celtas</a></li>
+                <li><a href="https://alexxanorafa.github.io/Runas-Estelares/" class="menu-item">Runas Estelares</a></li>
+                <li><a href="https://alexxanorafa.github.io/Runas-do-Destino/" class="menu-item">Runas Nórdicas</a></li>
+                <li><a href="https://alexxanorafa.github.io/Tabuleiro-Quantico/" class="menu-item">Tabuleiro Quantico</a></li>
+                <li><a href="https://alexxanorafa.github.io/TarodeMarselha/" class="menu-item">Tarô de Marselha</a></li>
+                <li><a href="https://alexxanorafa.github.io/Tasseografia/" class="menu-item">Tasseografia</a></li>
+                <li><a href="https://alexxanorafa.github.io/Tempo_e_Sonhos/" class="menu-item">Tempo e Sonhos</a></li>
+                <li><a href="https://alexxanorafa.github.io/The-Da-Vinci-Code/" class="menu-item">The Da Vinci Code</a></li>
+                <li><a href="https://alexxanorafa.github.io/Whispering-Shadows/" class="menu-item">Whispering Shadows</a></li>
+                <li><a href="https://alexxanorafa.github.io/Whispering-Shadows-2/" class="menu-item">Whispering Shadows 2</a></li>
+                <li><a href="https://alexxanorafa.github.io/Whispering-Shadows-3/" class="menu-item">Whispering Shadows 3</a></li>
+                <li><a href="https://alexxanorafa.github.io/Xamanismo-Animal/" class="menu-item">Xamanismo Animal</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="eco-app">
+        <div class="eco-grid">
+            <!-- Módulo 1: Espelho Climático -->
+            <section class="eco-module climate-mirror">
+                <h2>🌤 Espelho Climático</h2>
+                <div class="weather-visualization">
+                    <canvas id="weatherCanvas"></canvas>
+                    <div class="weather-data">
+                        <div class="data-item">
+                            <span class="label">Temperatura</span>
+                            <span class="value" id="temperature">--</span>
+                        </div>
+                        <div class="data-item">
+                            <span class="label">Humidade</span>
+                            <span class="value" id="humidity">--</span>
+                        </div>
+                        <div class="data-item">
+                            <span class="label">Vento</span>
+                            <span class="value" id="wind">--</span>
+                        </div>
+                        <div class="data-item">
+                            <span class="label">Pressão</span>
+                            <span class="value" id="pressure">--</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="location-info" id="locationInfo">
+                    <span>📍 A carregar localização...</span>
+                </div>
+            </section>
+
+            <!-- Módulo 2: Rituais Bio-Digitais -->
+            <section class="eco-module bio-rituals">
+                <h2>🌿 Rituais Bio-Digitais</h2>
+                <div class="ritual-container">
+                    <div class="ritual-active" id="activeRitual">
+                        <h3 id="ritualTitle">Ritual do Momento</h3>
+                        <p id="ritualDescription">A carregar ritual personalizado...</p>
+                        <div class="ritual-timer">
+                            <div class="timer-circle">
+                                <span id="timerCount">60</span>s
+                            </div>
+                        </div>
+                        <button class="ritual-btn" id="startRitual">Iniciar Ritual</button>
+                    </div>
+                    <div class="ritual-stats">
+                        <div class="stat">
+                            <span class="stat-value" id="ritualsCompleted">0</span>
+                            <span class="stat-label">Rituais Completos</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value" id="ecoPoints">0</span>
+                            <span class="stat-label">Pontos Eco</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Módulo 3: Mapa de Espécies -->
+            <section class="eco-module species-map">
+                <h2>🐦 Mapa de Espécies</h2>
+                <div class="species-container">
+                    <div class="species-list" id="speciesList">
+                        <div class="species-item loading">
+                            🌱 A procurar vida próxima de ti...
+                        </div>
+                    </div>
+                    <div class="species-info">
+                        <p>Espécies documentadas no teu raio de 10km</p>
+                        <button class="refresh-btn" id="refreshSpecies">🔄 Atualizar</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Módulo 4: Campos de Força -->
+            <section class="eco-module force-fields">
+                <h2>🌀 Campos de Força</h2>
+                <div class="force-visualization">
+                    <canvas id="forceCanvas"></canvas>
+                    <div class="force-controls">
+                        <button id="windField">Campo de Vento</button>
+                        <button id="thermalField">Campo Térmico</button>
+                        <button id="bioField">Campo Biológico</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Loading Screen -->
+        <div class="loading-screen" id="loadingScreen">
+            <div class="loading-content">
+                <div class="eco-spinner"></div>
+                <h2>ECO-SAPIENS</h2>
+                <p>Conectando com os ritmos da Terra...</p>
+            </div>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
