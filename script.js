@@ -24,537 +24,597 @@ document.querySelectorAll(".menu-item").forEach(item => {
     });
 });
 
-// ============ ESTADO DA APLICAÇÃO ============
-const state = {
-    userLocation: null,
-    weatherData: null,
-    ritualsCompleted: parseInt(localStorage.getItem('eco_ritualsCompleted')) || 0,
-    ecoPoints: parseInt(localStorage.getItem('eco_ecoPoints')) || 0,
-    currentRitual: null,
-    activeField: 'wind'
-};
-
-// ============ SISTEMA DE CARREGAMENTO ============
-const loadingScreen = document.getElementById('loadingScreen');
-
-function hideLoading() {
-    setTimeout(() => {
-        loadingScreen.classList.add('hidden');
-        setTimeout(() => loadingScreen.remove(), 500);
-    }, 1500);
-}
-
-// ============ GEOLOCALIZAÇÃO ============
-async function getUserLocation() {
-    return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) {
-            reject(new Error('Geolocalização não suportada'));
-            return;
-        }
-
-        navigator.geolocation.getCurrentPosition(
-            position => {
-                state.userLocation = {
-                    lat: position.coords.latitude,
-                    lon: position.coords.longitude
-                };
-                resolve(state.userLocation);
-            },
-            error => {
-                reject(new Error('Permissão de localização negada'));
-            },
-            {
-                timeout: 10000,
-                enableHighAccuracy: false
-            }
-        );
-    });
-}
-
-// ============ API WEATHER - APENAS DADOS REAIS ============
-async function getWeatherData(lat, lon) {
-    try {
-        // Open-Meteo API - completamente gratuita e sem chave
-        const response = await fetch(
-            `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,surface_pressure,weather_code&timezone=auto`
-        );
-        
-        if (!response.ok) throw new Error('Open-Meteo API error');
-        
-        const data = await response.json();
-        const current = data.current;
-        
-        // Obter nome da localização via API de geocoding reversa
-        const locationName = await getLocationName(lat, lon);
-        
-        return {
-            temperature: Math.round(current.temperature_2m),
-            humidity: Math.round(current.relative_humidity_2m),
-            windSpeed: Math.round(current.wind_speed_10m * 3.6), // converter para km/h
-            windDeg: current.wind_direction_10m,
-            pressure: Math.round(current.surface_pressure),
-            weatherCode: current.weather_code,
-            description: getWeatherDescriptionFromCode(current.weather_code),
-            location: locationName
+// ============ SISTEMA DE ESTADO AVANÇADO ============
+class StateManager {
+    constructor() {
+        this.state = {
+            user: this.loadState('user', {
+                level: 1,
+                points: 0,
+                connectionTime: 0,
+                ritualsCompleted: 0,
+                missionsCompleted: 0,
+                quantumActivations: 0,
+                achievements: [],
+                energy: { solar: 0, lunar: 0, water: 0, wind: 0, quantum: 0 }
+            }),
+            weather: this.loadState('weather', {}),
+            missions: this.loadState('missions', {
+                active: [],
+                completed: []
+            })
         };
-    } catch (error) {
-        console.error('Erro ao obter dados meteorológicos:', error);
-        throw new Error('Não foi possível obter dados meteorológicos em tempo real');
     }
-}
 
-// API de Geocoding Reversa para obter nome da localização
-async function getLocationName(lat, lon) {
-    try {
-        const response = await fetch(
-            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=pt`
-        );
-        
-        if (response.ok) {
-            const data = await response.json();
-            return data.city || data.locality || 'Localização Atual';
+    loadState(key, defaultValue) {
+        try {
+            const stored = localStorage.getItem(`eco_${key}`);
+            return stored ? JSON.parse(stored) : defaultValue;
+        } catch {
+            return defaultValue;
         }
-    } catch (error) {
-        console.log('Geocoding API falhou');
     }
-    
-    return 'Tua Localização';
-}
 
-// Converter código meteorológico em descrição
-function getWeatherDescriptionFromCode(weatherCode) {
-    const weatherCodes = {
-        0: 'Céu limpo',
-        1: 'Principalmente limpo',
-        2: 'Parcialmente nublado',
-        3: 'Nublado',
-        45: 'Nevoeiro',
-        48: 'Nevoeiro com geada',
-        51: 'Chuvisco leve',
-        53: 'Chuvisco moderado',
-        55: 'Chuvisco denso',
-        56: 'Chuvisco gelado leve',
-        57: 'Chuvisco gelado denso',
-        61: 'Chuva leve',
-        63: 'Chuva moderada',
-        65: 'Chuva forte',
-        66: 'Chuva gelada leve',
-        67: 'Chuva gelada forte',
-        71: 'Queda de neve leve',
-        73: 'Queda de neve moderada',
-        75: 'Queda de neve forte',
-        77: 'Grãos de neve',
-        80: 'Pancadas de chuva leves',
-        81: 'Pancadas de chuva moderadas',
-        82: 'Pancadas de chuva violentas',
-        85: 'Pancadas de neve leves',
-        86: 'Pancadas de neve fortes',
-        95: 'Trovoada',
-        96: 'Trovoada com granizo leve',
-        99: 'Trovoada com granizo forte'
-    };
-    
-    return weatherCodes[weatherCode] || 'Condições desconhecidas';
-}
-
-// ============ VISUALIZAÇÃO DO CLIMA ============
-const weatherCanvas = document.getElementById('weatherCanvas');
-const weatherCtx = weatherCanvas.getContext('2d');
-
-function setupWeatherCanvas() {
-    weatherCanvas.width = weatherCanvas.clientWidth;
-    weatherCanvas.height = weatherCanvas.clientHeight;
-}
-
-function drawWeatherVisualization(weatherData) {
-    if (!weatherCtx) return;
-    
-    const width = weatherCanvas.width;
-    const height = weatherCanvas.height;
-    
-    // Limpar canvas
-    weatherCtx.clearRect(0, 0, width, height);
-    
-    // Fundo baseado nas condições reais
-    let gradient;
-    if (weatherData.weatherCode >= 0 && weatherData.weatherCode <= 3) {
-        // Céu limpo a nublado
-        gradient = weatherCtx.createLinearGradient(0, 0, width, height);
-        gradient.addColorStop(0, 'rgba(135, 206, 235, 0.2)'); // Azul céu
-        gradient.addColorStop(1, 'rgba(255, 255, 255, 0.1)');
-    } else if (weatherData.weatherCode >= 45 && weatherData.weatherCode <= 48) {
-        // Nevoeiro
-        gradient = weatherCtx.createLinearGradient(0, 0, width, height);
-        gradient.addColorStop(0, 'rgba(210, 210, 210, 0.3)');
-        gradient.addColorStop(1, 'rgba(180, 180, 180, 0.2)');
-    } else if (weatherData.weatherCode >= 51 && weatherData.weatherCode <= 67) {
-        // Chuva
-        gradient = weatherCtx.createLinearGradient(0, 0, width, height);
-        gradient.addColorStop(0, 'rgba(100, 149, 237, 0.3)'); // Azul acinzentado
-        gradient.addColorStop(1, 'rgba(70, 130, 180, 0.2)');
-    } else {
-        // Condições diversas
-        gradient = weatherCtx.createLinearGradient(0, 0, width, height);
-        gradient.addColorStop(0, 'rgba(46, 204, 113, 0.1)');
-        gradient.addColorStop(1, 'rgba(52, 152, 219, 0.1)');
+    saveState(key) {
+        try {
+            localStorage.setItem(`eco_${key}`, JSON.stringify(this.state[key]));
+        } catch (e) {
+            console.warn('Erro ao guardar estado:', e);
+        }
     }
-    
-    weatherCtx.fillStyle = gradient;
-    weatherCtx.fillRect(0, 0, width, height);
-    
-    // Desenhar elementos baseados nos dados meteorológicos REAIS
-    drawWindLines(weatherData.windSpeed, weatherData.windDeg);
-    drawTemperatureCircles(weatherData.temperature);
-    drawHumidityDrops(weatherData.humidity);
-    drawWeatherSymbol(weatherData.weatherCode);
+
+    updateState(key, updates) {
+        this.state[key] = { ...this.state[key], ...updates };
+        this.saveState(key);
+        this.notifyChanges(key);
+    }
+
+    notifyChanges(key) {
+        window.dispatchEvent(new CustomEvent(`eco-${key}-changed`, {
+            detail: this.state[key]
+        }));
+    }
 }
 
-function drawWindLines(speed, deg) {
-    const centerX = weatherCanvas.width / 2;
-    const centerY = weatherCanvas.height / 2;
-    const maxLength = Math.min(centerX, centerY) * 0.6;
-    
-    const angle = (deg * Math.PI) / 180;
-    const length = (speed / 30) * maxLength;
-    
-    // Cor baseada na velocidade do vento REAL
-    const intensity = Math.min(1, speed / 20);
-    weatherCtx.strokeStyle = `rgba(52, 152, 219, ${0.3 + intensity * 0.7})`;
-    weatherCtx.lineWidth = 1 + intensity * 3;
-    weatherCtx.setLineDash([5, 3]);
-    
-    weatherCtx.beginPath();
-    weatherCtx.moveTo(centerX, centerY);
-    weatherCtx.lineTo(
-        centerX + Math.cos(angle) * length,
-        centerY + Math.sin(angle) * length
-    );
-    weatherCtx.stroke();
-    
-    // Ponta da seta
-    weatherCtx.setLineDash([]);
-    const arrowSize = 8;
-    const endX = centerX + Math.cos(angle) * length;
-    const endY = centerY + Math.sin(angle) * length;
-    
-    weatherCtx.beginPath();
-    weatherCtx.moveTo(endX, endY);
-    weatherCtx.lineTo(
-        endX - Math.cos(angle - Math.PI/6) * arrowSize,
-        endY - Math.sin(angle - Math.PI/6) * arrowSize
-    );
-    weatherCtx.lineTo(
-        endX - Math.cos(angle + Math.PI/6) * arrowSize,
-        endY - Math.sin(angle + Math.PI/6) * arrowSize
-    );
-    weatherCtx.closePath();
-    weatherCtx.fillStyle = `rgba(52, 152, 219, ${0.3 + intensity * 0.7})`;
-    weatherCtx.fill();
-}
+const stateManager = new StateManager();
 
-function drawTemperatureCircles(temperature) {
-    const centerX = weatherCanvas.width / 2;
-    const centerY = weatherCanvas.height / 2;
-    
-    // Cor baseada na temperatura REAL
-    let hue;
-    if (temperature < 0) hue = 240;       // Azul (frio)
-    else if (temperature < 10) hue = 200; // Azul claro
-    else if (temperature < 20) hue = 160; // Verde-azulado
-    else if (temperature < 30) hue = 120; // Verde
-    else hue = 60;                        // Amarelo (quente)
-    
-    const intensity = Math.min(1, Math.abs(temperature - 15) / 30);
-    weatherCtx.fillStyle = `hsla(${hue}, 70%, 50%, ${0.2 + intensity * 0.3})`;
-    
-    // Número de círculos baseado na temperatura REAL
-    const circleCount = Math.max(3, Math.min(8, Math.floor(Math.abs(temperature) / 5)));
-    const baseRadius = 20;
-    
-    for (let i = 0; i < circleCount; i++) {
-        const radius = baseRadius + (i * 12);
-        const pulse = Math.sin(Date.now() / 1000 + i) * 2;
+// ============ SISTEMA DE MISSÕES ============
+class MissionSystem {
+    constructor() {
+        this.missions = {
+            'first_observation': {
+                title: "Primeira Observação",
+                description: "Completa o teu primeiro ritual de observação",
+                icon: "🔍",
+                reward: { points: 50, energy: { solar: 10 } },
+                condition: (state) => state.ritualsCompleted >= 1,
+                progress: (state) => Math.min(state.ritualsCompleted, 1)
+            },
+            'wind_whisperer': {
+                title: "Sussurro do Vento",
+                description: "Completa 3 rituais com vento acima de 10km/h",
+                icon: "💨",
+                reward: { points: 100, energy: { wind: 20 } },
+                condition: (state) => state.ritualsCompleted >= 3,
+                progress: (state) => Math.min(state.ritualsCompleted, 3) / 3
+            },
+            'quantum_initiate': {
+                title: "Iniciado Quântico",
+                description: "Ativa o modo quântico 5 vezes",
+                icon: "⚛️",
+                reward: { points: 150, energy: { quantum: 30 } },
+                condition: (state) => state.quantumActivations >= 5,
+                progress: (state) => Math.min(state.quantumActivations || 0, 5) / 5
+            }
+        };
+    }
+
+    checkMissions() {
+        const state = stateManager.state.user;
+        let newMissionUnlocked = false;
+
+        for (const [missionId, mission] of Object.entries(this.missions)) {
+            if (!stateManager.state.missions.completed.includes(missionId) &&
+                !stateManager.state.missions.active.includes(missionId) &&
+                mission.condition(state)) {
+                
+                stateManager.state.missions.active.push(missionId);
+                this.showMissionAlert(mission);
+                newMissionUnlocked = true;
+            }
+        }
+
+        if (newMissionUnlocked) {
+            stateManager.saveState('missions');
+        }
+    }
+
+    showMissionAlert(mission) {
+        const alert = document.getElementById('missionAlert');
+        const missionText = document.getElementById('missionText');
         
-        weatherCtx.beginPath();
-        weatherCtx.arc(centerX, centerY, radius + pulse, 0, 2 * Math.PI);
+        missionText.textContent = mission.description;
+        alert.classList.remove('hidden');
+
+        document.getElementById('acceptMission').onclick = () => {
+            alert.classList.add('hidden');
+            this.updateMissionsDisplay();
+        };
+    }
+
+    updateMissionsDisplay() {
+        const missionsList = document.getElementById('missionsList');
+        const completedMissions = document.getElementById('completedMissions');
         
-        if (i % 2 === 0) {
-            weatherCtx.fill();
-        } else {
-            weatherCtx.strokeStyle = `hsla(${hue}, 70%, 50%, ${0.3 + intensity * 0.2})`;
-            weatherCtx.lineWidth = 1;
-            weatherCtx.stroke();
+        const activeMissions = stateManager.state.missions.active;
+        completedMissions.textContent = stateManager.state.missions.completed.length;
+
+        missionsList.innerHTML = activeMissions.map(missionId => {
+            const mission = this.missions[missionId];
+            const progress = mission.progress(stateManager.state.user) * 100;
+            
+            return `
+                <div class="mission-item">
+                    <span class="mission-icon">${mission.icon}</span>
+                    <span class="mission-text">${mission.title}</span>
+                    <div class="mission-progress">
+                        <div class="mission-fill" style="width: ${progress}%"></div>
+                    </div>
+                </div>
+            `;
+        }).join('') || '<div class="mission-item">Nenhuma missão ativa</div>';
+    }
+
+    completeMission(missionId) {
+        const missionIndex = stateManager.state.missions.active.indexOf(missionId);
+        if (missionIndex > -1) {
+            stateManager.state.missions.active.splice(missionIndex, 1);
+            stateManager.state.missions.completed.push(missionId);
+            
+            const reward = this.missions[missionId].reward;
+            this.applyReward(reward);
+            
+            stateManager.saveState('missions');
+            this.updateMissionsDisplay();
+            achievementSystem.showAchievement(this.missions[missionId].title);
+        }
+    }
+
+    applyReward(reward) {
+        if (reward.points) {
+            stateManager.updateState('user', {
+                points: stateManager.state.user.points + reward.points
+            });
+        }
+        if (reward.energy) {
+            const newEnergy = { ...stateManager.state.user.energy };
+            Object.keys(reward.energy).forEach(type => {
+                newEnergy[type] = (newEnergy[type] || 0) + reward.energy[type];
+            });
+            stateManager.updateState('user', { energy: newEnergy });
         }
     }
 }
 
-function drawHumidityDrops(humidity) {
-    const dropCount = Math.floor(humidity / 15); // Baseado na humidade REAL
-    
-    for (let i = 0; i < dropCount; i++) {
-        const x = Math.random() * weatherCanvas.width;
-        const y = Math.random() * weatherCanvas.height;
-        const size = 1 + Math.random() * 3;
-        const alpha = 0.1 + (humidity / 200); // Alpha baseado na humidade REAL
+// ============ SISTEMA DE ACHIEVEMENTS ============
+class AchievementSystem {
+    constructor() {
+        this.achievements = {
+            'first_step': { title: "Primeiro Passo", description: "Completa o primeiro ritual", icon: "👣" },
+            'wind_master': { title: "Mestre do Vento", description: "5 rituais de vento completados", icon: "💨" },
+            'quantum_explorer': { title: "Explorador Quântico", description: "10 ativações do modo quântico", icon: "⚛️" }
+        };
+    }
+
+    showAchievement(title) {
+        const achievement = Object.values(this.achievements).find(a => a.title === title);
+        if (!achievement) return;
+
+        const popup = document.getElementById('achievementPopup');
+        const achievementTitle = document.getElementById('achievementTitle');
+        const achievementDesc = document.getElementById('achievementDesc');
+
+        achievementTitle.textContent = achievement.title;
+        achievementDesc.textContent = achievement.description;
         
-        weatherCtx.fillStyle = `rgba(52, 152, 219, ${alpha})`;
+        popup.classList.remove('hidden');
+
+        setTimeout(() => {
+            popup.classList.add('hidden');
+        }, 3000);
+    }
+
+    updateAchievementsDisplay() {
+        const achievementsGrid = document.getElementById('achievementsGrid');
+        const completed = stateManager.state.user.achievements || [];
         
-        // Desenhar gota
-        weatherCtx.beginPath();
-        weatherCtx.moveTo(x, y);
-        weatherCtx.lineTo(x - size, y + size * 4);
-        weatherCtx.lineTo(x + size, y + size * 4);
-        weatherCtx.closePath();
-        weatherCtx.fill();
+        const displayAchievements = Object.keys(this.achievements).slice(0, 3);
+        
+        achievementsGrid.innerHTML = displayAchievements.map(achievementId => {
+            const isUnlocked = completed.includes(achievementId);
+            const achievement = this.achievements[achievementId];
+            
+            return `
+                <div class="${isUnlocked ? 'achievement-unlocked' : 'achievement-locked'}">
+                    ${isUnlocked ? achievement.icon : '🔒'}
+                </div>
+            `;
+        }).join('');
     }
 }
 
-function drawWeatherSymbol(weatherCode) {
-    const centerX = weatherCanvas.width / 2;
-    const centerY = weatherCanvas.height / 2;
-    
-    weatherCtx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    weatherCtx.font = '24px Arial';
-    weatherCtx.textAlign = 'center';
-    weatherCtx.textBaseline = 'middle';
-    
-    let symbol = '☀️'; // Default
-    
-    if (weatherCode >= 0 && weatherCode <= 3) symbol = '☀️';
-    else if (weatherCode >= 45 && weatherCode <= 48) symbol = '🌫️';
-    else if (weatherCode >= 51 && weatherCode <= 67) symbol = '🌧️';
-    else if (weatherCode >= 71 && weatherCode <= 77) symbol = '❄️';
-    else if (weatherCode >= 80 && weatherCode <= 86) symbol = '⛈️';
-    else if (weatherCode >= 95 && weatherCode <= 99) symbol = '🌩️';
-    
-    weatherCtx.fillText(symbol, centerX, centerY - 60);
+// ============ SISTEMA DE ENERGIA ============
+class EnergySystem {
+    constructor() {
+        this.energyTypes = ['solar', 'lunar', 'water', 'wind', 'quantum'];
+    }
+
+    updateEnergyDisplay() {
+        const energy = stateManager.state.user.energy || {};
+        
+        this.energyTypes.forEach(type => {
+            const element = document.getElementById(`${type}Energy`);
+            if (element) {
+                element.textContent = energy[type] || 0;
+            }
+        });
+    }
+
+    generateEnergy(weatherData, ritualType) {
+        const energyGains = {
+            solar: this.calculateSolarEnergy(weatherData),
+            lunar: this.calculateLunarEnergy(),
+            water: this.calculateWaterEnergy(weatherData),
+            wind: this.calculateWindEnergy(weatherData),
+            quantum: ritualType === 'quantum' ? 5 : 0
+        };
+
+        const newEnergy = { ...stateManager.state.user.energy };
+        this.energyTypes.forEach(type => {
+            newEnergy[type] = (newEnergy[type] || 0) + (energyGains[type] || 0);
+        });
+
+        stateManager.updateState('user', { energy: newEnergy });
+        this.updateEnergyDisplay();
+    }
+
+    calculateSolarEnergy(weatherData) {
+        const hour = new Date().getHours();
+        const isDaytime = hour >= 6 && hour <= 20;
+        const isSunny = weatherData.weatherCode <= 3;
+        
+        return isDaytime && isSunny ? 2 : 0;
+    }
+
+    calculateLunarEnergy() {
+        const hour = new Date().getHours();
+        const isNighttime = hour < 6 || hour > 20;
+        return isNighttime ? 1 : 0;
+    }
+
+    calculateWaterEnergy(weatherData) {
+        return weatherData.humidity > 70 ? 2 : 0;
+    }
+
+    calculateWindEnergy(weatherData) {
+        return weatherData.windSpeed > 15 ? 3 : 1;
+    }
 }
 
-// ============ SISTEMA DE RITUAIS ============
+// ============ SISTEMA DE NÍVEL E PROGRESSO ============
+class LevelSystem {
+    constructor() {
+        this.levels = {
+            1: { points: 0, title: "Iniciante", color: "#95a5a6" },
+            2: { points: 100, title: "Explorador", color: "#2ecc71" },
+            3: { points: 300, title: "Guardiano", color: "#3498db" },
+            4: { points: 600, title: "Xamã Digital", color: "#9b59b6" },
+            5: { points: 1000, title: "Eco-Sapiens", color: "#f1c40f" }
+        };
+    }
+
+    calculateLevel(points) {
+        let currentLevel = 1;
+        for (const [level, data] of Object.entries(this.levels)) {
+            if (points >= data.points) {
+                currentLevel = parseInt(level);
+            }
+        }
+        return currentLevel;
+    }
+
+    getLevelProgress(points) {
+        const currentLevel = this.calculateLevel(points);
+        const currentLevelData = this.levels[currentLevel];
+        const nextLevelData = this.levels[currentLevel + 1];
+        
+        if (!nextLevelData) return 100;
+        
+        const pointsInLevel = points - currentLevelData.points;
+        const pointsToNextLevel = nextLevelData.points - currentLevelData.points;
+        
+        return (pointsInLevel / pointsToNextLevel) * 100;
+    }
+
+    updateLevelDisplay() {
+        const points = stateManager.state.user.points || 0;
+        const level = this.calculateLevel(points);
+        const levelData = this.levels[level];
+        const progress = this.getLevelProgress(points);
+
+        document.getElementById('levelBadge').textContent = levelData.title;
+        document.getElementById('levelFill').style.width = `${progress}%`;
+        document.getElementById('levelFill').style.background = levelData.color;
+        document.getElementById('progressLevel').textContent = level;
+        document.getElementById('progressPoints').textContent = points;
+    }
+}
+
+// ============ SISTEMA DE RITUAIS AVANÇADO ============
 class BioRitualSystem {
     constructor() {
         this.currentTimer = null;
         this.isRitualActive = false;
+        this.currentTimeLeft = 0;
+        this.energySystem = new EnergySystem();
     }
     
     generateRitual(weatherData) {
         const rituals = [
             {
                 title: "Respiração do Vento",
-                description: `Sincroniza tua respiração com o vento de ${weatherData.windSpeed} km/h. Inspira por 4s, expira por 6s.`,
+                description: "Sincroniza tua respiração com o ritmo do vento local.",
                 duration: 60,
                 type: "wind",
-                points: 10
+                points: 10,
+                energyMultiplier: 1.5
             },
             {
                 title: "Grounding Térmico", 
-                description: `Conecta com a temperatura de ${weatherData.temperature}°C. Sente o calor/frio e ajusta tua respiração.`,
+                description: "Conecta com a temperatura ambiente através da respiração consciente.",
                 duration: 90,
                 type: "thermal",
-                points: 15
+                points: 15,
+                energyMultiplier: 1.2
             },
             {
                 title: "Meditação da Humidade",
-                description: `Visualiza a humidade de ${weatherData.humidity}% como uma brisa refrescante que te envolve.`,
+                description: "Visualiza a humidade do ar como uma chuva purificadora.",
                 duration: 120,
-                type: "water",
-                points: 20
+                type: "water", 
+                points: 20,
+                energyMultiplier: 1.3
             },
             {
-                title: "Conexão com a Pressão",
-                description: `Sente a pressão atmosférica de ${weatherData.pressure} hPa como um abraço da Terra. Relaxa e entrega-te.`,
-                duration: 75,
-                type: "pressure", 
-                points: 12
+                title: "Não-Solidez Quântica",
+                description: "Sente teu corpo como energia pura - 99.9% espaço vazio vibrando.",
+                duration: 180,
+                type: "quantum",
+                points: 30,
+                energyMultiplier: 2.0,
+                conditions: { windSpeed: 5 }
             }
         ];
         
-        // Escolher ritual baseado nos dados meteorológicos REAIS
         let chosenRitual;
-        if (weatherData.windSpeed > 5) {
-            chosenRitual = rituals[0]; // Vento
+        
+        if (weatherData.windSpeed < 5) {
+            chosenRitual = rituals[3];
+        } else if (weatherData.windSpeed > 10) {
+            chosenRitual = rituals[0];
         } else if (Math.abs(weatherData.temperature - 22) > 8) {
-            chosenRitual = rituals[1]; // Temperatura extrema
+            chosenRitual = rituals[1];
         } else if (weatherData.humidity > 70) {
-            chosenRitual = rituals[2]; // Humidade alta
+            chosenRitual = rituals[2];
         } else {
-            chosenRitual = rituals[3]; // Pressão
+            const availableRituals = rituals.filter(r => !r.conditions || 
+                weatherData.windSpeed <= r.conditions.windSpeed);
+            chosenRitual = availableRituals[Math.floor(Math.random() * availableRituals.length)];
         }
         
-        state.currentRitual = chosenRitual;
+        this.currentRitual = chosenRitual;
         this.displayRitual(chosenRitual);
     }
     
     displayRitual(ritual) {
-        document.getElementById('ritualTitle').textContent = ritual.title;
-        document.getElementById('ritualDescription').textContent = ritual.description;
-        document.getElementById('timerCount').textContent = ritual.duration;
+        document.getElementById('ritualName').textContent = ritual.title;
+        document.getElementById('ritualTimer').textContent = this.formatTime(ritual.duration);
+        this.currentTimeLeft = ritual.duration;
+    }
+    
+    formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
     
     startRitual() {
-        if (this.isRitualActive || !state.currentRitual) return;
+        if (this.isRitualActive || !this.currentRitual) return;
         
         this.isRitualActive = true;
-        const ritual = state.currentRitual;
-        let timeLeft = ritual.duration;
+        const ritual = this.currentRitual;
+        this.currentTimeLeft = ritual.duration;
         
-        const startBtn = document.getElementById('startRitual');
-        const timerCircle = document.querySelector('.timer-circle');
-        
-        startBtn.disabled = true;
-        startBtn.textContent = 'Ritual em Progresso...';
-        timerCircle.style.borderColor = '#2ecc71';
+        const startBtn = document.getElementById('startRitualBtn');
+        startBtn.textContent = '⏸️';
         
         this.currentTimer = setInterval(() => {
-            timeLeft--;
-            document.getElementById('timerCount').textContent = timeLeft;
+            this.currentTimeLeft--;
+            document.getElementById('ritualTimer').textContent = this.formatTime(this.currentTimeLeft);
             
-            // Animação do círculo
-            const progress = (ritual.duration - timeLeft) / ritual.duration;
-            timerCircle.style.background = `conic-gradient(#2ecc71 ${progress * 360}deg, transparent ${progress * 360}deg)`;
+            const progress = ((ritual.duration - this.currentTimeLeft) / ritual.duration) * 100;
+            document.getElementById('progressFill').style.width = `${progress}%`;
             
-            if (timeLeft <= 0) {
+            if (this.currentTimeLeft <= 0) {
                 this.completeRitual();
             }
         }, 1000);
     }
     
-    completeRitual() {
-        clearInterval(this.currentTimer);
+    pauseRitual() {
+        if (this.currentTimer) {
+            clearInterval(this.currentTimer);
+            this.currentTimer = null;
+        }
         this.isRitualActive = false;
+        document.getElementById('startRitualBtn').textContent = '▶️';
+    }
+    
+    completeRitual() {
+        this.pauseRitual();
         
-        state.ritualsCompleted++;
-        state.ecoPoints += state.currentRitual.points;
+        const ritual = this.currentRitual;
+        const userState = stateManager.state.user;
         
-        this.updateStats();
-        this.saveProgress();
+        const updates = {
+            ritualsCompleted: (userState.ritualsCompleted || 0) + 1,
+            points: (userState.points || 0) + ritual.points,
+            connectionTime: (userState.connectionTime || 0) + ritual.duration
+        };
         
-        const startBtn = document.getElementById('startRitual');
-        const timerCircle = document.querySelector('.timer-circle');
+        stateManager.updateState('user', updates);
         
-        startBtn.disabled = false;
-        startBtn.textContent = 'Ritual Concluído! ✨';
-        timerCircle.style.background = '';
-        timerCircle.style.borderColor = '#2ecc71';
+        this.energySystem.generateEnergy(window.weatherData, ritual.type);
         
-        // Efeito visual de conclusão
-        document.querySelector('.ritual-active').style.boxShadow = '0 0 20px rgba(46, 204, 113, 0.5)';
+        missionSystem.checkMissions();
+        
+        document.getElementById('ritualTimer').textContent = 'Concluído!';
+        document.getElementById('progressFill').style.width = '100%';
+        
+        this.updateStatsDisplay();
+        levelSystem.updateLevelDisplay();
         
         setTimeout(() => {
-            startBtn.textContent = 'Iniciar Novo Ritual';
-            document.querySelector('.ritual-active').style.boxShadow = '';
-            this.generateRitual(state.weatherData);
+            this.generateRitual(window.weatherData);
         }, 3000);
     }
     
-    updateStats() {
-        document.getElementById('ritualsCompleted').textContent = state.ritualsCompleted;
-        document.getElementById('ecoPoints').textContent = state.ecoPoints;
-    }
-    
-    saveProgress() {
-        localStorage.setItem('eco_ritualsCompleted', state.ritualsCompleted.toString());
-        localStorage.setItem('eco_ecoPoints', state.ecoPoints.toString());
+    updateStatsDisplay() {
+        const user = stateManager.state.user;
+        document.getElementById('ritualsCount').textContent = `${user.ritualsCompleted || 0} completos`;
+        document.getElementById('progressTime').textContent = `${Math.floor((user.connectionTime || 0) / 60)}min`;
     }
 }
 
-// ============ MAPA DE ESPÉCIES - DADOS REAIS ============
-async function loadLocalSpecies(lat, lon) {
-    try {
-        // GBIF API - dados reais de biodiversidade
-        const response = await fetch(
-            `https://api.gbif.org/v1/occurrence/search?lat=${lat}&lon=${lon}&limit=6&radius=50&hasCoordinate=true&hasGeospatialIssue=false&basisOfRecord=HUMAN_OBSERVATION&year=2022,2023,2024`
-        );
-        
-        if (!response.ok) throw new Error('GBIF API error');
-        
-        const data = await response.json();
-        
-        if (data.results && data.results.length > 0) {
-            // Filtrar e processar dados REAIS
-            const realSpecies = data.results
-                .filter(occurrence => occurrence.species && occurrence.family)
-                .slice(0, 6)
-                .map(occurrence => ({
-                    species: occurrence.species,
-                    family: occurrence.family,
-                    year: occurrence.year
-                }));
-            
-            return realSpecies.length > 0 ? realSpecies : getFallbackSpecies();
-        } else {
-            return getFallbackSpecies();
-        }
-    } catch (error) {
-        console.log('API de espécies temporariamente indisponível');
-        return getFallbackSpecies();
-    }
-}
-
-// Apenas espécies reais como fallback
-function getFallbackSpecies() {
-    return [
-        { species: 'Pardal-comum', family: 'Passeridae', year: 'Observação comum' },
-        { species: 'Andorinha-das-chaminés', family: 'Hirundinidae', year: 'Migratória' },
-        { species: 'Pombo-doméstico', family: 'Columbidae', year: 'Urbana' }
-    ];
-}
-
-function displaySpecies(speciesList) {
-    const container = document.getElementById('speciesList');
-    
-    if (!speciesList || speciesList.length === 0) {
-        container.innerHTML = '<div class="species-item">🔍 A explorar biodiversidade local...</div>';
-        return;
-    }
-    
-    container.innerHTML = speciesList.map(species => `
-        <div class="species-item">
-            <strong>${species.species}</strong>
-            <br>
-            <small>${species.family} • ${species.year || 'Observada'}</small>
-        </div>
-    `).join('');
-}
-
-// ============ CAMPOS DE FORÇA ============
-const forceCanvas = document.getElementById('forceCanvas');
-const forceCtx = forceCanvas.getContext('2d');
-let forceAnimationId = null;
-
-function setupForceCanvas() {
-    forceCanvas.width = forceCanvas.clientWidth;
-    forceCanvas.height = forceCanvas.clientHeight;
-}
-
-class ForceFieldVisualization {
+// ============ SISTEMA DE MINI-JOGO ============
+class MinigameSystem {
     constructor() {
+        this.targetHarmony = { temp: 75, humidity: 60, pressure: 45 };
+    }
+
+    calculateHarmony(sliderValues) {
+        let harmony = 100;
+        
+        Object.keys(this.targetHarmony).forEach(param => {
+            const difference = Math.abs(sliderValues[param] - this.targetHarmony[param]);
+            harmony -= difference * 0.5;
+        });
+        
+        const exactMatches = Object.keys(this.targetHarmony).filter(param => 
+            Math.abs(sliderValues[param] - this.targetHarmony[param]) <= 2
+        ).length;
+        
+        harmony += exactMatches * 10;
+        
+        return Math.max(0, Math.min(100, Math.round(harmony)));
+    }
+
+    setupMinigame() {
+        const harmonizeBtn = document.getElementById('harmonizeBtn');
+        const sliders = document.querySelectorAll('.param-slider');
+        
+        harmonizeBtn.addEventListener('click', () => {
+            const sliderValues = {};
+            sliders.forEach(slider => {
+                sliderValues[slider.dataset.param] = parseInt(slider.value);
+            });
+            
+            const harmony = this.calculateHarmony(sliderValues);
+            this.showHarmonyResult(harmony);
+            
+            if (harmony > 80) {
+                stateManager.updateState('user', {
+                    points: (stateManager.state.user.points || 0) + 25
+                });
+                levelSystem.updateLevelDisplay();
+            }
+        });
+
+        sliders.forEach(slider => {
+            slider.addEventListener('input', () => {
+                const sliderValues = {};
+                sliders.forEach(s => {
+                    sliderValues[s.dataset.param] = parseInt(s.value);
+                });
+                const harmony = this.calculateHarmony(sliderValues);
+                document.getElementById('harmonyValue').textContent = `${harmony}%`;
+                document.getElementById('harmonyFill').style.width = `${harmony}%`;
+            });
+        });
+    }
+
+    showHarmonyResult(harmony) {
+        const messages = {
+            90: "🎵 Harmonia Perfeita! A natureza canta contigo.",
+            70: "👍 Boa sintonia! O ecossistema responde.",
+            50: "🔧 Ajusta um pouco mais...",
+            30: "🌪️ Busca o equilíbrio..."
+        };
+        
+        let message = "💤 Começa a harmonizar...";
+        for (const [threshold, msg] of Object.entries(messages)) {
+            if (harmony >= parseInt(threshold)) {
+                message = msg;
+                break;
+            }
+        }
+        
+        document.getElementById('insightText').textContent = message;
+    }
+}
+
+// ============ CAMPOS DE FORÇA (OTIMIZADO) ============
+class OptimizedForceField {
+    constructor() {
+        this.canvas = document.getElementById('mainCanvas');
+        this.ctx = this.canvas.getContext('2d');
         this.particles = [];
         this.fieldType = 'wind';
+        this.animationId = null;
+        this.lastRenderTime = 0;
+        this.fps = 30;
         this.initParticles();
     }
     
     initParticles() {
         this.particles = [];
-        const particleCount = 150;
+        const particleCount = this.calculateOptimalParticleCount();
         
         for (let i = 0; i < particleCount; i++) {
             this.particles.push({
-                x: Math.random() * forceCanvas.width,
-                y: Math.random() * forceCanvas.height,
+                x: Math.random() * this.canvas.width,
+                y: Math.random() * this.canvas.height,
                 vx: 0,
                 vy: 0,
-                size: 1 + Math.random() * 4,
+                size: 1 + Math.random() * 3,
                 life: 0.5 + Math.random() * 0.5,
                 decay: 0.001 + Math.random() * 0.002,
-                originalSize: 1 + Math.random() * 4
+                originalSize: 1 + Math.random() * 3
             });
         }
     }
     
+    calculateOptimalParticleCount() {
+        const isMobile = window.innerWidth < 768;
+        const isLowPower = navigator.hardwareConcurrency < 4;
+        
+        if (isMobile && isLowPower) return 80;
+        if (isMobile) return 120;
+        return 200;
+    }
+    
     updateParticles() {
         this.particles.forEach(particle => {
-            // Forças baseadas no tipo de campo (visual apenas)
             switch(this.fieldType) {
                 case 'wind':
                     particle.vx += 0.1;
@@ -565,8 +625,8 @@ class ForceFieldVisualization {
                     particle.vx += (Math.random() - 0.5) * 0.3;
                     break;
                 case 'bio':
-                    const centerX = forceCanvas.width / 2;
-                    const centerY = forceCanvas.height / 2;
+                    const centerX = this.canvas.width / 2;
+                    const centerY = this.canvas.height / 2;
                     const dx = particle.x - centerX;
                     const dy = particle.y - centerY;
                     const distance = Math.sqrt(dx * dx + dy * dy);
@@ -576,64 +636,71 @@ class ForceFieldVisualization {
                     particle.vx += Math.cos(angle) * force;
                     particle.vy += Math.sin(angle) * force;
                     break;
+                case 'quantum':
+                    if (Math.random() < 0.02) {
+                        particle.vx = (Math.random() - 0.5) * 4;
+                        particle.vy = (Math.random() - 0.5) * 4;
+                    }
+                    particle.size = particle.originalSize * (0.5 + 0.5 * Math.sin(Date.now() * 0.002 + particle.x));
+                    break;
             }
             
-            // Atualizar posição
             particle.x += particle.vx;
             particle.y += particle.vy;
             
-            // Reduzir velocidade
             particle.vx *= 0.98;
             particle.vy *= 0.98;
             
-            // Decaimento e renascimento
             particle.life -= particle.decay;
             if (particle.life <= 0 || 
-                particle.x < -50 || particle.x > forceCanvas.width + 50 ||
-                particle.y < -50 || particle.y > forceCanvas.height + 50) {
+                particle.x < -50 || particle.x > this.canvas.width + 50 ||
+                particle.y < -50 || particle.y > this.canvas.height + 50) {
                 this.resetParticle(particle);
             }
         });
     }
     
     resetParticle(particle) {
-        particle.x = Math.random() * forceCanvas.width;
-        particle.y = Math.random() * forceCanvas.height;
+        particle.x = Math.random() * this.canvas.width;
+        particle.y = Math.random() * this.canvas.height;
         particle.vx = 0;
         particle.vy = 0;
         particle.life = 0.5 + Math.random() * 0.5;
     }
     
     draw() {
-        forceCtx.clearRect(0, 0, forceCanvas.width, forceCanvas.height);
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // Fundo com gradiente
         let gradient;
         switch(this.fieldType) {
             case 'wind':
-                gradient = forceCtx.createLinearGradient(0, 0, forceCanvas.width, 0);
+                gradient = this.ctx.createLinearGradient(0, 0, this.canvas.width, 0);
                 gradient.addColorStop(0, 'rgba(52, 152, 219, 0.05)');
                 gradient.addColorStop(1, 'rgba(52, 152, 219, 0.1)');
                 break;
             case 'thermal':
-                gradient = forceCtx.createLinearGradient(0, 0, 0, forceCanvas.height);
+                gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
                 gradient.addColorStop(0, 'rgba(231, 76, 60, 0.05)');
                 gradient.addColorStop(1, 'rgba(243, 156, 18, 0.1)');
                 break;
             case 'bio':
-                gradient = forceCtx.createRadialGradient(
-                    forceCanvas.width/2, forceCanvas.height/2, 0,
-                    forceCanvas.width/2, forceCanvas.height/2, forceCanvas.width/2
+                gradient = this.ctx.createRadialGradient(
+                    this.canvas.width/2, this.canvas.height/2, 0,
+                    this.canvas.width/2, this.canvas.height/2, this.canvas.width/2
                 );
                 gradient.addColorStop(0, 'rgba(46, 204, 113, 0.05)');
                 gradient.addColorStop(1, 'rgba(39, 174, 96, 0.1)');
                 break;
+            case 'quantum':
+                gradient = this.ctx.createLinearGradient(0, 0, this.canvas.width, this.canvas.height);
+                gradient.addColorStop(0, 'rgba(155, 89, 182, 0.05)');
+                gradient.addColorStop(1, 'rgba(155, 89, 182, 0.1)');
+                break;
         }
         
-        forceCtx.fillStyle = gradient;
-        forceCtx.fillRect(0, 0, forceCanvas.width, forceCanvas.height);
+        this.ctx.fillStyle = gradient;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // Desenhar partículas
         this.particles.forEach(particle => {
             let color;
             switch(this.fieldType) {
@@ -646,145 +713,388 @@ class ForceFieldVisualization {
                 case 'bio':
                     color = `rgba(46, 204, 113, ${particle.life})`;
                     break;
+                case 'quantum':
+                    color = `rgba(155, 89, 182, ${particle.life})`;
+                    break;
             }
             
-            forceCtx.fillStyle = color;
-            forceCtx.beginPath();
-            forceCtx.arc(particle.x, particle.y, particle.size, 0, 2 * Math.PI);
-            forceCtx.fill();
+            this.ctx.fillStyle = color;
+            this.ctx.beginPath();
+            this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+            this.ctx.fill();
         });
     }
     
-    animate() {
-        this.updateParticles();
-        this.draw();
-        forceAnimationId = requestAnimationFrame(() => this.animate());
+    animate(currentTime) {
+        if (!this.lastRenderTime) this.lastRenderTime = currentTime;
+        
+        const delta = currentTime - this.lastRenderTime;
+        
+        if (delta > 1000 / this.fps) {
+            this.updateParticles();
+            this.draw();
+            this.lastRenderTime = currentTime;
+        }
+        
+        this.animationId = requestAnimationFrame((time) => this.animate(time));
     }
     
     setFieldType(type) {
         this.fieldType = type;
         this.initParticles();
+        this.updateInsight();
+        
+        if (type === 'quantum') {
+            const current = stateManager.state.user.quantumActivations || 0;
+            stateManager.updateState('user', { quantumActivations: current + 1 });
+            missionSystem.checkMissions();
+        }
+    }
+    
+    updateInsight() {
+        const insightText = document.getElementById('insightText');
+        const insights = {
+            wind: "O vento lembra que tudo está em constante movimento e transformação.",
+            thermal: "O calor é energia em transição - tudo vibra em frequências específicas.",
+            bio: "A vida emerge de padrões complexos no campo biológico universal.",
+            quantum: "No nível quântico, a matéria é 99.9% espaço vazio - pura potencialidade."
+        };
+        insightText.textContent = insights[this.fieldType] || insights.wind;
+    }
+    
+    resize() {
+        this.canvas.width = this.canvas.clientWidth;
+        this.canvas.height = this.canvas.clientHeight;
+        this.initParticles();
     }
     
     stop() {
-        if (forceAnimationId) {
-            cancelAnimationFrame(forceAnimationId);
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
         }
     }
 }
 
-// ============ INICIALIZAÇÃO DA APLICAÇÃO ============
-async function initializeApp() {
-    try {
-        console.log('🌱 Iniciando ECO-SAPIENS com dados REAIS...');
-        
-        // 1. Obter localização REAL do usuário
-        await getUserLocation();
-        console.log('📍 Localização REAL obtida:', state.userLocation);
-        
-        // 2. Carregar dados meteorológicos REAIS
-        state.weatherData = await getWeatherData(state.userLocation.lat, state.userLocation.lon);
-        console.log('🌤 Dados meteorológicos REAIS:', state.weatherData);
-        
-        // 3. Atualizar UI com dados REAIS
-        updateWeatherUI(state.weatherData);
-        
-        // 4. Configurar visualizações
-        setupWeatherCanvas();
-        setupForceCanvas();
-        drawWeatherVisualization(state.weatherData);
-        
-        // 5. Inicializar sistemas com dados REAIS
-        const ritualSystem = new BioRitualSystem();
-        ritualSystem.generateRitual(state.weatherData);
-        ritualSystem.updateStats();
-        
-        // 6. Inicializar campos de força (visual apenas)
-        const forceField = new ForceFieldVisualization();
-        forceField.animate();
-        
-        // 7. Carregar espécies locais REAIS
-        const species = await loadLocalSpecies(state.userLocation.lat, state.userLocation.lon);
-        displaySpecies(species);
-        
-        // 8. Configurar event listeners
-        document.getElementById('startRitual').addEventListener('click', () => {
-            ritualSystem.startRitual();
+// ============ SISTEMA DE TUTORIAL ============
+class TutorialSystem {
+    constructor() {
+        this.currentStep = 1;
+        this.totalSteps = 3;
+        this.hasSeenTutorial = localStorage.getItem('eco_tutorial_seen') === 'true';
+    }
+
+    showTutorial() {
+        if (!this.hasSeenTutorial) {
+            document.getElementById('tutorialModal').style.display = 'flex';
+        }
+    }
+
+    setupTutorial() {
+        const tutorialModal = document.getElementById('tutorialModal');
+        const nextBtn = document.getElementById('nextStep');
+        const skipBtn = document.getElementById('skipTutorial');
+        const startBtn = document.getElementById('startPlaying');
+
+        // Mostrar tutorial para novos utilizadores
+        if (!this.hasSeenTutorial) {
+            setTimeout(() => {
+                tutorialModal.style.display = 'flex';
+                this.updateTutorialDisplay();
+            }, 1500);
+        }
+
+        nextBtn.addEventListener('click', () => {
+            this.currentStep++;
+            this.updateTutorialDisplay();
         });
-        
-        document.getElementById('refreshSpecies').addEventListener('click', async () => {
-            const refreshBtn = document.getElementById('refreshSpecies');
-            refreshBtn.textContent = '🔄 A procurar...';
-            const species = await loadLocalSpecies(state.userLocation.lat, state.userLocation.lon);
-            displaySpecies(species);
-            refreshBtn.textContent = '🔄 Atualizar';
+
+        skipBtn.addEventListener('click', () => {
+            this.completeTutorial();
         });
-        
-        // Controles dos campos de força
-        document.getElementById('windField').classList.add('active');
-        document.getElementById('windField').addEventListener('click', () => {
-            forceField.setFieldType('wind');
-            setActiveFieldButton('windField');
+
+        startBtn.addEventListener('click', () => {
+            this.completeTutorial();
         });
-        
-        document.getElementById('thermalField').addEventListener('click', () => {
-            forceField.setFieldType('thermal');
-            setActiveFieldButton('thermalField');
+    }
+
+    updateTutorialDisplay() {
+        // Esconder todos os passos
+        document.querySelectorAll('.step').forEach(step => {
+            step.classList.remove('active');
         });
+
+        // Mostrar passo atual
+        const currentStepElement = document.querySelector(`[data-step="${this.currentStep}"]`);
+        if (currentStepElement) {
+            currentStepElement.classList.add('active');
+        }
+
+        // Atualizar botões
+        const nextBtn = document.getElementById('nextStep');
+        const startBtn = document.getElementById('startPlaying');
+        const skipBtn = document.getElementById('skipTutorial');
+
+        if (this.currentStep >= this.totalSteps) {
+            nextBtn.style.display = 'none';
+            startBtn.style.display = 'block';
+            skipBtn.style.display = 'none';
+        } else {
+            nextBtn.style.display = 'block';
+            startBtn.style.display = 'none';
+            skipBtn.style.display = 'block';
+        }
+    }
+
+    completeTutorial() {
+        document.getElementById('tutorialModal').style.display = 'none';
+        localStorage.setItem('eco_tutorial_seen', 'true');
+        this.hasSeenTutorial = true;
         
-        document.getElementById('bioField').addEventListener('click', () => {
-            forceField.setFieldType('bio');
-            setActiveFieldButton('bioField');
-        });
+        // Mostrar mensagem de boas-vindas
+        document.getElementById('insightText').textContent = "🎉 Tutorial completo! Agora explora o ECO-SAPIENS por ti mesmo!";
+    }
+
+    showHelpGuide() {
+        // Criar modal de guia completo
+        const modalOverlay = document.createElement('div');
+        modalOverlay.className = 'modal-overlay';
+        modalOverlay.style.display = 'flex';
         
-        // 9. Esconder loading screen
-        hideLoading();
-        
-        console.log('✅ ECO-SAPIENS inicializado com DADOS REAIS!');
-        
-    } catch (error) {
-        console.error('❌ Erro na inicialização:', error);
-        
-        // Mostrar erro ao usuário em vez de dados simulados
-        document.getElementById('loadingScreen').innerHTML = `
-            <div class="loading-content">
-                <h2>🌍 ECO-SAPIENS</h2>
-                <p>⚠️ ${error.message}</p>
-                <p style="font-size: 0.9rem; margin-top: 10px;">
-                    Para uma experiência completa, permite a localização e verifica a ligação à internet.
-                </p>
-                <button onclick="location.reload()" style="margin-top: 15px; padding: 10px 20px; background: var(--primary); border: none; border-radius: 20px; color: white; cursor: pointer;">
-                    🔄 Tentar Novamente
-                </button>
+        modalOverlay.innerHTML = `
+            <div class="guide-modal">
+                <h2>📚 Guia Completo ECO-SAPIENS</h2>
+                
+                <div class="guide-section">
+                    <h3>🎮 COMO JOGAR</h3>
+                    <p><strong>1. Rituais (Coluna Esquerda)</strong> - Clica ▶️ para iniciar exercícios de conexão com a natureza. Dura 1-3 minutos.</p>
+                    <p><strong>2. Mini-Jogo (Centro)</strong> - Ajusta os sliders para criar harmonia perfeita. Objetivo: >80% de harmonia.</p>
+                    <p><strong>3. Missões</strong> - Completa objetivos para ganhar pontos e energia especial.</p>
+                    <p><strong>4. Campos de Força</strong> - Experimenta os 4 modos de visualização diferentes.</p>
+                </div>
+                
+                <div class="guide-section">
+                    <h3>⚡ SISTEMA DE ENERGIA</h3>
+                    <p>• <strong>Solar ☀️</strong> - Ganha com rituais durante o dia com sol</p>
+                    <p>• <strong>Lunar 🌙</strong> - Ganha com rituais durante a noite</p>
+                    <p>• <strong>Água 💧</strong> - Ganha com humidade alta (>70%)</p>
+                    <p>• <strong>Vento 💨</strong> - Ganha com vento forte (>15km/h)</p>
+                    <p>• <strong>Quântica ⚛️</strong> - Ganha ativando o modo quântico</p>
+                </div>
+                
+                <div class="guide-section">
+                    <h3>🏆 SISTEMA DE PROGRESSO</h3>
+                    <p><strong>Níveis:</strong> Iniciante → Explorador → Guardião → Xamã Digital → Eco-Sapiens</p>
+                    <p><strong>Pontos:</strong> Ganha completando rituais e missões</p>
+                    <p><strong>Conquistas:</strong> Desbloqueia achievements especiais</p>
+                </div>
+                
+                <div class="guide-section">
+                    <h3>💡 DICAS RÁPIDAS</h3>
+                    <p>• Completa pelo menos 3 rituais por dia</p>
+                    <p>• Foca em atingir alta harmonia no mini-jogo</p>
+                    <p>• Experimenta todos os campos de força</p>
+                    <p>• Verifica as missões regularmente</p>
+                </div>
+                
+                <button class="btn-close-guide">Fechar Guia</button>
             </div>
         `;
+        
+        document.body.appendChild(modalOverlay);
+        
+        // Fechar modal
+        modalOverlay.querySelector('.btn-close-guide').addEventListener('click', () => {
+            document.body.removeChild(modalOverlay);
+        });
+        
+        // Fechar ao clicar fora
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) {
+                document.body.removeChild(modalOverlay);
+            }
+        });
     }
 }
 
-function updateWeatherUI(weatherData) {
-    document.getElementById('temperature').textContent = `${weatherData.temperature}°C`;
-    document.getElementById('humidity').textContent = `${weatherData.humidity}%`;
-    document.getElementById('wind').textContent = `${weatherData.windSpeed} km/h`;
-    document.getElementById('pressure').textContent = `${weatherData.pressure} hPa`;
-    document.getElementById('locationInfo').innerHTML = 
-        `📍 ${weatherData.location} | ${weatherData.description}`;
-}
+// ============ SISTEMAS PRINCIPAIS ============
+const missionSystem = new MissionSystem();
+const achievementSystem = new AchievementSystem();
+const levelSystem = new LevelSystem();
+const ritualSystem = new BioRitualSystem();
+const minigameSystem = new MinigameSystem();
+const tutorialSystem = new TutorialSystem();
+let forceField;
 
-function setActiveFieldButton(activeId) {
-    document.querySelectorAll('.force-controls button').forEach(btn => {
-        btn.classList.remove('active');
+// ============ PRINCÍPIOS QUÂNTICOS ============
+function setupQuantumPrinciples() {
+    const principles = {
+        'non-solidity': "A matéria é 99.9% espaço vazio com campos quânticos. O que percebemos como sólido é vibração pura.",
+        'interconnection': "Tudo está emaranhado a nível quântico. Separação é uma ilusão da percepção limitada.",
+        'transformation': "Como E=MC² mostra, massa e energia são intercambiáveis. Tudo pode transmutar."
+    };
+    
+    document.querySelectorAll('.principle-item').forEach(item => {
+        item.addEventListener('click', function() {
+            document.querySelectorAll('.principle-item').forEach(i => i.classList.remove('active'));
+            this.classList.add('active');
+            
+            const principle = this.dataset.principle;
+            document.getElementById('principleDetail').innerHTML = `<p>${principles[principle]}</p>`;
+        });
     });
-    document.getElementById(activeId).classList.add('active');
 }
 
-// ============ EVENT LISTENERS GLOBAIS ============
-window.addEventListener('resize', () => {
-    setupWeatherCanvas();
-    setupForceCanvas();
-    if (state.weatherData) {
-        drawWeatherVisualization(state.weatherData);
+// ============ ESPÉCIES ============
+async function loadLocalSpecies(lat, lon) {
+    try {
+        const speciesExamples = [
+            "Pardal-comum", "Oliveira", "Abelha-europeia", 
+            "Pinheiro-manso", "Toutinegra", "Urze", "Lavanda", "Alecrim"
+        ];
+        
+        const shuffled = speciesExamples.sort(() => 0.5 - Math.random());
+        return shuffled.slice(0, 4);
+    } catch (error) {
+        return ["Pardal-comum", "Oliveira", "Abelha-europeia"];
     }
-});
+}
+
+function displaySpecies(speciesList) {
+    const container = document.getElementById('speciesList');
+    const speciesCount = document.getElementById('speciesCount');
+    
+    container.innerHTML = speciesList.map(species => 
+        `<div class="species-item">${species}</div>`
+    ).join('');
+    
+    speciesCount.textContent = speciesList.length;
+}
+
+// ============ ATUALIZAÇÃO DA UI ============
+function updateWeatherUI(weatherData) {
+    document.getElementById('mainTemp').textContent = `${weatherData.temperature}°C`;
+    document.getElementById('windStat').textContent = `${weatherData.windSpeed}km/h`;
+    document.getElementById('humidityStat').textContent = `${weatherData.humidity}%`;
+    document.getElementById('pressureStat').textContent = `${weatherData.pressure}hPa`;
+}
+
+// ============ SIMULAÇÃO DE DADOS DE TEMPO ============
+function simulateWeatherData() {
+    return {
+        temperature: Math.floor(Math.random() * 15) + 15, // 15-30°C
+        windSpeed: Math.floor(Math.random() * 20) + 5,    // 5-25 km/h
+        humidity: Math.floor(Math.random() * 50) + 30,    // 30-80%
+        pressure: Math.floor(Math.random() * 30) + 1000,  // 1000-1030 hPa
+        weatherCode: Math.floor(Math.random() * 5)        // 0-4
+    };
+}
+
+// ============ CONTROLES DE VISUALIZAÇÃO ============
+function setupVisualizationControls() {
+    document.querySelectorAll('.viz-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.viz-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            
+            const fieldType = this.dataset.field;
+            forceField.setFieldType(fieldType);
+        });
+    });
+}
+
+// ============ CONTROLE DE RITUAL ============
+function setupRitualControls() {
+    const startBtn = document.getElementById('startRitualBtn');
+    startBtn.addEventListener('click', function() {
+        if (ritualSystem.isRitualActive) {
+            ritualSystem.pauseRitual();
+        } else {
+            ritualSystem.startRitual();
+        }
+    });
+}
+
+// ============ SISTEMA DE AJUDA ============
+function setupHelpSystem() {
+    // Botão de ajuda no header
+    document.getElementById('helpIcon').addEventListener('click', () => {
+        tutorialSystem.showHelpGuide();
+    });
+    
+    // Botão de guia completo no módulo de ajuda
+    document.getElementById('showFullGuide').addEventListener('click', () => {
+        tutorialSystem.showHelpGuide();
+    });
+    
+    // Tooltips automáticos para elementos com a classe tooltip
+    setupAutoTooltips();
+}
+
+function setupAutoTooltips() {
+    // Os tooltips já funcionam via CSS, esta função é para lógica adicional se necessário
+    console.log('🔧 Tooltips configurados automaticamente');
+}
+
+// ============ INICIALIZAÇÃO DA APLICAÇÃO ============
+async function initializeApp() {
+    console.log('🚀 Inicializando ECO-SAPIENS...');
+    
+    // Mostrar loading screen
+    const loadingScreen = document.getElementById('loadingScreen');
+    
+    try {
+        // 1. Inicializar dados básicos
+        window.weatherData = simulateWeatherData();
+        updateWeatherUI(window.weatherData);
+        
+        // 2. Inicializar sistemas
+        forceField = new OptimizedForceField();
+        
+        // 3. Configurar controles
+        setupVisualizationControls();
+        setupRitualControls();
+        setupQuantumPrinciples();
+        minigameSystem.setupMinigame();
+        
+        // 4. Configurar sistema de tutorial e ajuda
+        tutorialSystem.setupTutorial();
+        setupHelpSystem();
+        
+        // 5. Carregar espécies locais
+        const species = await loadLocalSpecies();
+        displaySpecies(species);
+        
+        // 6. Inicializar ritual
+        ritualSystem.generateRitual(window.weatherData);
+        
+        // 7. Atualizar displays
+        missionSystem.updateMissionsDisplay();
+        achievementSystem.updateAchievementsDisplay();
+        levelSystem.updateLevelDisplay();
+        ritualSystem.updateStatsDisplay();
+        
+        // 8. Iniciar animação
+        forceField.resize();
+        forceField.animate(performance.now());
+        
+        // 9. Configurar redimensionamento
+        window.addEventListener('resize', () => {
+            forceField.resize();
+        });
+        
+        // 10. Esconder loading screen após um tempo
+        setTimeout(() => {
+            loadingScreen.classList.add('hidden');
+            console.log('✅ ECO-SAPIENS inicializado com sucesso!');
+        }, 2000);
+        
+    } catch (error) {
+        console.error('❌ Erro ao inicializar aplicação:', error);
+        loadingScreen.classList.add('hidden');
+    }
+}
 
 // ============ INICIAR APLICAÇÃO ============
-document.addEventListener('DOMContentLoaded', initializeApp);
+document.addEventListener('DOMContentLoaded', function() {
+    initializeApp();
+});
