@@ -14,6 +14,13 @@
             <span></span>
         </div>
         <h1>ECO-SAPIENS</h1>
+        <div class="user-level" id="userLevel">
+            <span class="level-badge" id="levelBadge">Iniciante</span>
+            <div class="level-progress">
+                <div class="level-fill" id="levelFill"></div>
+            </div>
+        </div>
+        <div class="help-icon" id="helpIcon">❓</div>
         <nav class="menu" id="menu">
             <ul>
                 <li><a href="https://alexxanorafa.github.io/Alquimia-dos-Sentimentos/" class="menu-item">Alquimia dos Sentimentos</a></li>
@@ -24,9 +31,8 @@
                 <li><a href="https://alexxanorafa.github.io/Buzios/" class="menu-item">Buzios</a></li>
                 <li><a href="https://alexxanorafa.github.io/Cartas-de-Sibila/" class="menu-item">Cartas de Sibila</a></li>
                 <li><a href="https://alexxanorafa.github.io/Do-you-love-me/" class="menu-item">Do you love me?</a></li>
-                <li><a href="https://alexxanorafa.github.io/ECO-SAPIENS/" class="menu-item">ECO-SAPIENS</a></li>
-                <li><a href="https://alexxanorafa.github.io/Entrecamadas-Telepatia-Proposito/" class="menu-item">Entrecamadas</a></li>
                 <li><a href="https://alexxanorafa.github.io/I-Ching-Virtual/" class="menu-item">I Ching Virtual</a></li>
+                <li><a href="https://alexxanorafa.github.io/Jogo-Didatico-Banco-de-Dados/" class="menu-item">Jogo Didatico Banco de Dados</a></li>
                 <li><a href="https://alexxanorafa.github.io/Jornada-Arquetipica/" class="menu-item">Jornada Arquetípica</a></li>
                 <li><a href="https://alexxanorafa.github.io/Jornadas-Mitologica/" class="menu-item">Jornada Mitológica</a></li>
                 <li><a href="https://alexxanorafa.github.io/Kabbalah-Interativa/" class="menu-item">Kabbalah Interativa</a></li>
@@ -56,91 +62,248 @@
     </header>
 
     <main class="eco-app">
-        <div class="eco-grid">
-            <!-- Módulo 1: Espelho Climático -->
-            <section class="eco-module climate-mirror">
-                <h2>🌤 Espelho Climático</h2>
-                <div class="weather-visualization">
-                    <canvas id="weatherCanvas"></canvas>
-                    <div class="weather-data">
-                        <div class="data-item">
-                            <span class="label">Temperatura</span>
-                            <span class="value" id="temperature">--</span>
-                        </div>
-                        <div class="data-item">
-                            <span class="label">Humidade</span>
-                            <span class="value" id="humidity">--</span>
-                        </div>
-                        <div class="data-item">
-                            <span class="label">Vento</span>
-                            <span class="value" id="wind">--</span>
-                        </div>
-                        <div class="data-item">
-                            <span class="label">Pressão</span>
-                            <span class="value" id="pressure">--</span>
-                        </div>
+        <!-- Tutorial Modal -->
+        <div class="tutorial-modal" id="tutorialModal">
+            <div class="tutorial-content">
+                <h2>🎮 Bem-vindo ao ECO-SAPIENS!</h2>
+                <div class="tutorial-steps">
+                    <div class="step active" data-step="1">
+                        <h3>🌿 Começa com Rituais</h3>
+                        <p>Clica <strong>▶️</strong> para iniciar teu primeiro ritual de 60 segundos</p>
+                        <div class="step-image">⏱️ → 🎯 → ⚡</div>
+                    </div>
+                    <div class="step" data-step="2">
+                        <h3>🎵 Orquestra Climática</h3>
+                        <p>Ajusta os sliders para criar harmonia perfeita (>80%)</p>
+                        <div class="step-image">📊 → 🎶 → 🏆</div>
+                    </div>
+                    <div class="step" data-step="3">
+                        <h3>🌀 Campos de Força</h3>
+                        <p>Experimenta os 4 modos diferentes de visualização</p>
+                        <div class="step-image">💨 → 🔥 → 🌿 → ⚛️</div>
                     </div>
                 </div>
-                <div class="location-info" id="locationInfo">
-                    <span>📍 A carregar localização...</span>
+                <div class="tutorial-controls">
+                    <button class="btn-skip" id="skipTutorial">Saltar</button>
+                    <button class="btn-next" id="nextStep">Próximo</button>
+                    <button class="btn-start" id="startPlaying">Começar a Jogar!</button>
                 </div>
-            </section>
+            </div>
+        </div>
 
-            <!-- Módulo 2: Rituais Bio-Digitais -->
-            <section class="eco-module bio-rituals">
-                <h2>🌿 Rituais Bio-Digitais</h2>
-                <div class="ritual-container">
-                    <div class="ritual-active" id="activeRitual">
-                        <h3 id="ritualTitle">Ritual do Momento</h3>
-                        <p id="ritualDescription">A carregar ritual personalizado...</p>
-                        <div class="ritual-timer">
-                            <div class="timer-circle">
-                                <span id="timerCount">60</span>s
+        <!-- Notificação de Missão -->
+        <div class="mission-alert hidden" id="missionAlert">
+            <div class="mission-content">
+                <h3>🎯 Nova Missão Desbloqueada!</h3>
+                <p id="missionText"></p>
+                <button class="btn-accept" id="acceptMission">Aceitar Missão</button>
+            </div>
+        </div>
+
+        <div class="eco-grid">
+            <!-- COLUNA ESQUERDA -->
+            <div class="left-column">
+                <!-- Módulo: Estado Atual -->
+                <section class="eco-module compact status-module">
+                    <h2>🌤 Estado Atual</h2>
+                    <div class="weather-minimal">
+                        <div class="main-temp" id="mainTemp">--°C</div>
+                        <div class="quick-stats">
+                            <span>💨 <span id="windStat">--km/h</span></span>
+                            <span>💧 <span id="humidityStat">--%</span></span>
+                            <span>🔻 <span id="pressureStat">--hPa</span></span>
+                        </div>
+                    </div>
+                    <div class="energy-display">
+                        <div class="energy-item">
+                            <span class="energy-icon">🌞</span>
+                            <span class="energy-value" id="solarEnergy">0</span>
+                        </div>
+                        <div class="energy-item">
+                            <span class="energy-icon">🌙</span>
+                            <span class="energy-value" id="lunarEnergy">0</span>
+                        </div>
+                        <div class="energy-item">
+                            <span class="energy-icon">💧</span>
+                            <span class="energy-value" id="waterEnergy">0</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Módulo: Ritual Ativo -->
+                <section class="eco-module compact ritual-module">
+                    <h2>🌿 Ritual Ativo</h2>
+                    <div class="ritual-minimal">
+                        <div class="ritual-name" id="ritualName">Carregando...</div>
+                        <div class="ritual-timer" id="ritualTimer">--:--</div>
+                        <button class="btn-minimal tooltip" id="startRitualBtn" data-tooltip="Clica para iniciar/pausar o ritual">▶️</button>
+                    </div>
+                    <div class="ritual-progress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <span id="ritualsCount">0 completos</span>
+                    </div>
+                </section>
+
+                <!-- Módulo: Missões Ativas -->
+                <section class="eco-module compact missions-module">
+                    <h2>🎯 Missões</h2>
+                    <div class="missions-list" id="missionsList">
+                        <div class="mission-item">
+                            <span class="mission-icon">🔍</span>
+                            <span class="mission-text">Primeira Observação</span>
+                            <div class="mission-progress">
+                                <div class="mission-fill" style="width: 0%"></div>
                             </div>
                         </div>
-                        <button class="ritual-btn" id="startRitual">Iniciar Ritual</button>
                     </div>
-                    <div class="ritual-stats">
-                        <div class="stat">
-                            <span class="stat-value" id="ritualsCompleted">0</span>
-                            <span class="stat-label">Rituais Completos</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-value" id="ecoPoints">0</span>
-                            <span class="stat-label">Pontos Eco</span>
-                        </div>
+                    <div class="missions-stats">
+                        <span>Concluídas: <strong id="completedMissions">0</strong></span>
                     </div>
-                </div>
-            </section>
+                </section>
+            </div>
 
-            <!-- Módulo 3: Mapa de Espécies -->
-            <section class="eco-module species-map">
-                <h2>🐦 Mapa de Espécies</h2>
-                <div class="species-container">
-                    <div class="species-list" id="speciesList">
-                        <div class="species-item loading">
-                            🌱 A procurar vida próxima de ti...
+            <!-- COLUNA CENTRAL -->
+            <div class="center-column">
+                <!-- Visualização Principal -->
+                <section class="eco-module main-visualization">
+                    <div class="visualization-header">
+                        <h2>🌀 Campo de Força</h2>
+                        <div class="visual-controls">
+                            <button class="viz-btn active tooltip" data-field="wind" data-tooltip="Partículas movem-se como o vento">Vento</button>
+                            <button class="viz-btn tooltip" data-field="thermal" data-tooltip="Partículas sobem como ar quente">Térmico</button>
+                            <button class="viz-btn tooltip" data-field="bio" data-tooltip="Padrões orgânicos e circulares">Biológico</button>
+                            <button class="viz-btn quantum tooltip" data-field="quantum" data-tooltip="Movimento aleatório quântico">⚛️ Quântico</button>
                         </div>
                     </div>
-                    <div class="species-info">
-                        <p>Espécies documentadas no teu raio de 10km</p>
-                        <button class="refresh-btn" id="refreshSpecies">🔄 Atualizar</button>
+                    <canvas id="mainCanvas"></canvas>
+                    
+                    <!-- Insights e Achievements -->
+                    <div class="context-insight" id="contextInsight">
+                        <div class="insight-icon">💡</div>
+                        <p id="insightText">Bem-vindo ao ECO-SAPIENS! Começa com o teu primeiro ritual.</p>
                     </div>
-                </div>
-            </section>
 
-            <!-- Módulo 4: Campos de Força -->
-            <section class="eco-module force-fields">
-                <h2>🌀 Campos de Força</h2>
-                <div class="force-visualization">
-                    <canvas id="forceCanvas"></canvas>
-                    <div class="force-controls">
-                        <button id="windField">Campo de Vento</button>
-                        <button id="thermalField">Campo Térmico</button>
-                        <button id="bioField">Campo Biológico</button>
+                    <!-- Achievements Popup -->
+                    <div class="achievement-popup hidden" id="achievementPopup">
+                        <div class="achievement-content">
+                            <span class="achievement-icon">🏆</span>
+                            <div class="achievement-text">
+                                <strong id="achievementTitle"></strong>
+                                <span id="achievementDesc"></span>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            </section>
+                </section>
+
+                <!-- Mini-jogo: Orquestra Climática -->
+                <section class="eco-module compact minigame-module">
+                    <h2>🎵 Orquestra Climática</h2>
+                    <div class="minigame-controls">
+                        <div class="parameter-slider">
+                            <label>Temperatura</label>
+                            <input type="range" min="0" max="100" value="50" class="param-slider tooltip" data-param="temp" data-tooltip="Ajusta a temperatura virtual">
+                        </div>
+                        <div class="parameter-slider">
+                            <label>Humidade</label>
+                            <input type="range" min="0" max="100" value="50" class="param-slider tooltip" data-param="humidity" data-tooltip="Controla a humidade do ambiente">
+                        </div>
+                        <div class="parameter-slider">
+                            <label>Pressão</label>
+                            <input type="range" min="0" max="100" value="50" class="param-slider tooltip" data-param="pressure" data-tooltip="Regula a pressão atmosférica">
+                        </div>
+                        <button class="btn-harmonize tooltip" id="harmonizeBtn" data-tooltip="Clica para verificar tua harmonia com a natureza">🎶 Harmonizar</button>
+                    </div>
+                    <div class="harmony-meter">
+                        <div class="harmony-fill" id="harmonyFill"></div>
+                        <span>Harmonia: <strong id="harmonyValue">0%</strong></span>
+                    </div>
+                </section>
+            </div>
+
+            <!-- COLUNA DIREITA -->
+            <div class="right-column">
+                <!-- Módulo: Ajuda Rápida -->
+                <section class="eco-module compact help-module">
+                    <h2>❓ Ajuda Rápida</h2>
+                    <div class="quick-help">
+                        <div class="help-item">
+                            <span class="help-emoji">🌿</span>
+                            <span class="help-text">Clica ▶️ para iniciar rituais</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-emoji">🎵</span>
+                            <span class="help-text">Ajusta sliders para >80% harmonia</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-emoji">⚛️</span>
+                            <span class="help-text">Experimenta todos os campos de força</span>
+                        </div>
+                        <button class="btn-full-guide" id="showFullGuide">Ver Guia Completo</button>
+                    </div>
+                </section>
+
+                <!-- Módulo: Princípios Quânticos -->
+                <section class="eco-module compact quantum-module">
+                    <h2>⚛️ Princípios</h2>
+                    <div class="principles-minimal">
+                        <div class="principle-item active" data-principle="non-solidity">
+                            <span class="principle-icon">🌌</span>
+                            <span class="principle-text">Não-Solidez</span>
+                        </div>
+                        <div class="principle-item" data-principle="interconnection">
+                            <span class="principle-icon">🔗</span>
+                            <span class="principle-text">Interconexão</span>
+                        </div>
+                        <div class="principle-item" data-principle="transformation">
+                            <span class="principle-icon">⚡</span>
+                            <span class="principle-text">Transformação</span>
+                        </div>
+                    </div>
+                    <div class="principle-detail" id="principleDetail">
+                        <p>A matéria é 99.9% espaço vazio - tudo é energia vibrando.</p>
+                    </div>
+                </section>
+
+                <!-- Módulo: Biodiversidade -->
+                <section class="eco-module compact species-module">
+                    <h2>🐦 Biodiversidade</h2>
+                    <div class="species-minimal" id="speciesList">
+                        <div class="species-item">A carregar...</div>
+                    </div>
+                    <div class="species-stats">
+                        <span>Espécies registadas: <strong id="speciesCount">0</strong></span>
+                    </div>
+                </section>
+
+                <!-- Módulo: Progresso e Achievements -->
+                <section class="eco-module compact progress-module">
+                    <h2>📈 Progresso</h2>
+                    <div class="progress-minimal">
+                        <div class="progress-item">
+                            <span class="progress-label">Nível</span>
+                            <span class="progress-value" id="progressLevel">1</span>
+                        </div>
+                        <div class="progress-item">
+                            <span class="progress-label">Pontos Eco</span>
+                            <span class="progress-value" id="progressPoints">0</span>
+                        </div>
+                        <div class="progress-item">
+                            <span class="progress-label">Tempo em Conexão</span>
+                            <span class="progress-value" id="progressTime">0min</span>
+                        </div>
+                    </div>
+                    <div class="achievements-preview">
+                        <h4>🏆 Conquistas</h4>
+                        <div class="achievements-grid" id="achievementsGrid">
+                            <div class="achievement-locked">🔒</div>
+                            <div class="achievement-locked">🔒</div>
+                            <div class="achievement-locked">🔒</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
         </div>
 
         <!-- Loading Screen -->
@@ -155,5 +318,4 @@
 
     <script src="script.js"></script>
 </body>
-
 </html>
